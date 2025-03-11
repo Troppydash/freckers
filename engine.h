@@ -131,7 +131,7 @@ namespace engine {
 
 
         explicit computer(pos pos)
-                : m_tt(128), m_pos(pos), m_searched(0), m_timer() {
+                : m_tt(64), m_pos(pos), m_searched(0), m_timer() {
             for (int i = 0; i < 2; ++i) {
                 for (int j = 0; j < 64; ++j) {
                     for (int k = 0; k < 64; ++k) {
@@ -142,7 +142,7 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 10) + move;
+                    m_lmr[depth][move] = std::max(1, depth / 10) + move * 2;
                 }
             }
         }
@@ -186,7 +186,7 @@ namespace engine {
                 } else if (!move.is_grow()) {
                     auto coord = move.get_coords();
                     int gap = abs(coord.second - coord.first) / bitboard::COLS;
-                    if (gap > 2) {
+                    if (gap >= 1) {
                         score += param::base_score + gap * 10;
                     } else {
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
@@ -250,6 +250,14 @@ namespace engine {
 
             if (m_timer.m_is_stopped) {
                 return 0;
+            }
+
+
+            int state = m_pos.get_state();
+            if (state == board::DRAW) {
+                return 0;
+            } else if (state != board::NONE) {
+                return -param::inf + ply;
             }
 
             if ((max_ply + ply) >= param::max_depth) {
@@ -420,12 +428,12 @@ namespace engine {
         std::string get_score(int score) {
             if (score > param::checkmate) {
                 int ply = param::inf - score;
-                return std::string{"mate in "} + std::to_string(ply) + " ply";
+                return std::string{"game in "} + std::to_string(ply) + " ply";
             }
 
             if (score < -param::checkmate) {
                 int ply = -param::inf - score;
-                return std::string{"mate in "} + std::to_string(ply) + " ply";
+                return std::string{"game in "} + std::to_string(ply) + " ply";
             }
 
             return std::to_string((double) score / 100);
@@ -466,7 +474,7 @@ namespace engine {
                     std::chrono::milliseconds now = m_timer.now();
                     long delta = (now - last).count();
                     int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-                    printf("[info] depth %d, nodes %d, value %s (%d), nps %d, ", depth, m_searched,
+                    printf("[info] depth %2d, nodes %10d, value %10s (%7d), nps %10d, ", depth, m_searched,
                            get_score(score).c_str(), score, nps);
 
                     printf("pv = [ ");

@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <cstdio>
+#include <sstream>
 
 namespace board {
     using mask = uint64_t;
@@ -261,6 +262,36 @@ namespace board {
             m_moves = 0;
         }
 
+
+        pos(mask mLilypads, mask red, mask blue, int mTurn, int mMoves) : m_lilypads(mLilypads), m_players{red, blue},
+                                                                          m_turn(mTurn), m_moves(mMoves) {}
+
+        static pos from_string(std::string &text, int turn) {
+            mask red = 0;
+            mask blue = 0;
+            mask lilypads = 0;
+
+            std::stringstream stream{text};
+            std::string tmp;
+            for (int row = 0; row < bitboard::ROWS; ++row) {
+                stream >> tmp;
+                for (int col = 0; col < bitboard::COLS; ++col) {
+                    int i = row * bitboard::COLS + col;
+                    stream >> tmp;
+                    if (tmp == "_") {
+                        lilypads |= (1ull << i);
+                    } else if (tmp == "R") {
+                        red |= (1ull << i);
+                    } else if (tmp == "B") {
+                        blue |= (1ull << i);
+                    }
+                }
+            }
+
+            return pos{lilypads, red, blue, turn, 0};
+
+        }
+
         bool has_jumps() const {
             mask new_jumps = 0;
             mask obst = m_players[0] | m_players[1];
@@ -439,7 +470,7 @@ namespace board {
         }
 
         uint64_t hash() const {
-            return cantor(m_players[0], cantor(m_players[1], m_lilypads));
+            return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
         }
     };
 
