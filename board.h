@@ -141,6 +141,12 @@ namespace board {
             return m_grow == bitboard::ALL - 1;
         }
 
+        std::pair<int, int> get_coords() {
+            auto start = bitboard::get_coord(m_start);
+            auto end = bitboard::get_coord(m_end);
+            return {start.first * bitboard::COLS + start.second, end.first * bitboard::COLS + end.second};
+        }
+
         static move null() {
             return {bitboard::ALL - 1, 0, 0};
         }
@@ -351,7 +357,8 @@ namespace board {
         }
 
         uint64_t hash() const {
-            return m_players[0] ^ (m_players[1] << 8 | (m_players[1] & 0xff)) ^ ((m_lilypads << 16) | (m_lilypads & 0xffff));
+            return m_players[0] ^ (m_players[1] << 8 | (m_players[1] & 0xff)) ^
+                   ((m_lilypads << 16) | (m_lilypads & 0xffff));
         }
     };
 

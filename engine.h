@@ -126,9 +126,25 @@ namespace engine {
         timer m_timer;
         int m_searched;
 
+        int m_history[2][64][64];
+        int m_lmr[50][100];
+
 
         explicit computer(pos pos)
                 : m_tt(128), m_pos(pos), m_searched(0), m_timer() {
+            for (int i = 0; i < 2; ++i) {
+                for (int j = 0; j < 64; ++j) {
+                    for (int k = 0; k < 64; ++k) {
+                        m_history[i][j][k] = 0;
+                    }
+                }
+            }
+
+            for (int depth = 0; depth < 50; ++depth) {
+                for (int move = 0; move < 100; ++move) {
+                    m_lmr[depth][move] = std::max(1, depth / 8) + move;
+                }
+            }
         }
 
         int evaluate() {
@@ -154,9 +170,9 @@ namespace engine {
             }
 
             if (m_pos.m_turn == board::RED) {
-                return (red_total - blue_total + 3) * 100;
+                return (red_total - blue_total + 2) * 100;
             } else {
-                return (blue_total - red_total + 3) * 100;
+                return (blue_total - red_total + 2) * 100;
             }
         }
 
@@ -169,8 +185,12 @@ namespace engine {
                 if (move == pv_move) {
                     score += param::pv_move_score;
                 } else {
-//                    int history = m_history[m_pos.m_turn][0][move.m_file];
-//                    score += history;
+                    if (!move.is_grow()) {
+                        auto coord = move.get_coords();
+                        int history = m_history[m_pos.m_turn][coord.first][coord.second];
+                        score += history;
+                    }
+
                 }
 
                 scores.push_back({score, i});
@@ -186,6 +206,35 @@ namespace engine {
                     best_score = scored_moves[j].first;
                     swap(scored_moves[i], scored_moves[j]);
                 }
+            }
+        }
+
+
+        void incr_history(move &move, int depth) {
+            if (move.is_grow())
+                return;
+
+            auto coord = move.get_coords();
+            m_history[m_pos.m_turn][coord.first][coord.second] += depth * depth;
+            if (m_history[m_pos.m_turn][coord.first][coord.second] > param::pv_move_score) {
+                for (auto &i: m_history) {
+                    for (auto &j: i) {
+                        for (int &k: j) {
+                            k /= 2;
+                        }
+                    }
+                }
+            }
+        }
+
+        void decr_history(move &move) {
+            if (move.is_grow())
+                return;
+
+            auto coord = move.get_coords();
+
+            if (m_history[m_pos.m_turn][coord.first][coord.second] > 0) {
+                m_history[m_pos.m_turn][coord.first][coord.second] -= 1;
             }
         }
 
@@ -236,12 +285,31 @@ namespace engine {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
-
                 m_pos.push(move);
 
+                int explored_moves = i + 1;
                 int score;
-                score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                if (explored_moves == 1) {
+                    score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                } else {
+                    int reduction = 0;
+                    if (!is_pv_node && explored_moves >= 3 && depth >= 3) {
+                        reduction = m_lmr[depth][explored_moves];
+                    }
 
+                    score = -negamax(depth - 1 - reduction, ply + 1, -(alpha + 1), -alpha, child_pv_line);
+                    if (score > alpha && reduction > 0) {
+                        child_pv_line.clear();
+                        score = -negamax(depth - 1, ply + 1, -(alpha + 1), -alpha, child_pv_line);
+                        if (score > alpha) {
+                            child_pv_line.clear();
+                            score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                        }
+                    } else if (alpha < score && score < beta) {
+                        child_pv_line.clear();
+                        score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                    }
+                }
                 m_pos.pop(move);
 
                 if (score > best_score) {
@@ -251,7 +319,10 @@ namespace engine {
 
                 if (score >= beta) {
                     tt_flag = param::beta_flag;
+                    incr_history(move, depth);
                     break;
+                } else {
+                    decr_history(move);
                 }
 
                 if (score > alpha) {
@@ -262,6 +333,9 @@ namespace engine {
                     for (auto m: child_pv_line) {
                         pv_line.push_back(m);
                     }
+                    incr_history(move, depth);
+                } else {
+                    decr_history(move);
                 }
 
                 child_pv_line.clear();
@@ -313,11 +387,23 @@ namespace engine {
                     break;
                 }
 
+
+                if (score <= alpha || score >= beta) {
+                    alpha = -param::inf;
+                    beta = param::inf;
+                    if (verbose) {
+                        printf("re-search\n");
+                    }
+                    continue;
+                }
+
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
 
                 best_move = pv_line[0];
+                alpha = score - 5 * 100;
+                beta = score + 5 * 100;
 
                 if (verbose) {
                     std::chrono::milliseconds now = m_timer.now();

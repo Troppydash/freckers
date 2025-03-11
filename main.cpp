@@ -15,10 +15,14 @@ int main() {
         std::cout << pos.display() << std::endl;
 
         if (pos.m_turn == board::RED) {
-            auto moves = pos.get_moves();
-            auto move = moves[randint(moves.size())];
+            engine::computer engine{pos};
+            auto move = engine.search(1000, nullptr, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
+//            auto moves = pos.get_moves();
+//            auto move = moves[randint(moves.size())];
+//            std::cout << "move " << move.display() << std::endl;
+//            pos.push(move);
         } else {
             engine::computer engine{pos};
             auto move = engine.search(1000, nullptr, true);
