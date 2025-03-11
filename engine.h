@@ -142,7 +142,7 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 10) + move * 2;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 2;
                 }
             }
         }
