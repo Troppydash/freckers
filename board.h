@@ -45,6 +45,16 @@ namespace board {
             return mask;
         }
 
+        static mask dilate(mask pos) {
+            mask no_left = ALL ^ LINE;
+            mask no_right = ALL ^ (LINE << (COLS - 1));
+            // left right, bottom left, bottom, bottom right, top right, top, top left
+            mask result = ((pos >> 1) & no_right) | ((pos << 1) & no_left) |
+                          ((pos << (ROWS - 1)) & no_right) | (pos << (ROWS)) | ((pos << (ROWS + 1)) & no_left)
+                          | ((pos >> (ROWS - 1)) & no_left) | (pos >> (ROWS)) | ((pos >> (ROWS + 1)) & no_right);
+            return result;
+        }
+
 
         static mask dilate_down(mask pos) {
             mask no_left = ALL ^ LINE;
@@ -90,13 +100,17 @@ namespace board {
             return left | right | top_left | top_right | top;
         }
 
+        static int get_index(mask pos) {
+            return __builtin_ctzll(pos);
+        }
+
         static std::pair<int, int> get_coord(mask pos) {
             int i = __builtin_ctzll(pos);
             return {i / COLS, i % COLS};
         }
 
         static std::string display(mask m) {
-            std::string out = "";
+            std::string out;
             for (int row = 0; row < bitboard::ROWS; ++row) {
                 out += std::to_string(row) + " ";
 
@@ -134,17 +148,17 @@ namespace board {
         mask m_end;
 
         bool is_grow() const {
-            return m_grow != bitboard::ALL;
+            return !is_null() && m_grow != bitboard::ALL;
         }
 
         bool is_null() const {
             return m_grow == bitboard::ALL - 1;
         }
 
-        std::pair<int, int> get_coords() {
-            auto start = bitboard::get_coord(m_start);
-            auto end = bitboard::get_coord(m_end);
-            return {start.first * bitboard::COLS + start.second, end.first * bitboard::COLS + end.second};
+        std::pair<int, int> get_coords() const {
+            auto start = bitboard::get_index(m_start);
+            auto end = bitboard::get_index(m_end);
+            return {start, end};
         }
 
         static move null() {
@@ -161,7 +175,7 @@ namespace board {
             }
         }
 
-        bool operator==(const move &other) {
+        bool operator==(const move &other) const {
             return m_grow == other.m_grow && m_start == other.m_start && m_end == other.m_end;
         }
 
@@ -231,9 +245,9 @@ namespace board {
 
             // first handle grow
             mask player = m_players[m_turn];
-            mask grown = bitboard::dilate_down(player) | bitboard::dilate_up(player);
+            mask grown = bitboard::dilate(player);
             grown &= ~m_lilypads;
-            moves.push_back(move{grown, {}});
+            moves.push_back(move{grown, 0, 0});
 
             // then handle moves for each piece
             mask pieces = player;
@@ -254,14 +268,12 @@ namespace board {
 
                 move::from_mask(direct, piece, moves);
 
-
                 // jumps
                 mask obst = m_players[0] | m_players[1];
                 mask all_jumps = piece;
                 mask next_jumps = piece;
                 while (next_jumps > 0) {
                     // broadcast
-
                     mask new_jumps = 0;
                     if (m_turn == RED) {
                         new_jumps = bitboard::jump_down(next_jumps, obst);
@@ -313,8 +325,8 @@ namespace board {
 
         int get_state() const {
             mask side[2] = {bitboard::BOTTOM, bitboard::TOP};
-            if ((m_players[1-m_turn] & side[1-m_turn]) == m_players[1-m_turn]) {
-                return 1-m_turn;
+            if ((m_players[1 - m_turn] & side[1 - m_turn]) == m_players[1 - m_turn]) {
+                return 1 - m_turn;
             }
             if (m_moves == DRAW_MOVES) {
                 return DRAW;
@@ -324,7 +336,7 @@ namespace board {
         }
 
         std::string display() const {
-            std::string out = "";
+            std::string out;
             for (int row = 0; row < bitboard::ROWS; ++row) {
                 out += std::to_string(row) + " ";
 
@@ -353,9 +365,12 @@ namespace board {
             return out;
         }
 
+        uint64_t cantor(uint64_t a, uint64_t b) const {
+            return (a+b+1) * (a+b) / 2 + b;
+        }
+
         uint64_t hash() const {
-            return m_players[0] ^ (m_players[1] << 8 | (m_players[1] & 0xff)) ^
-                   ((m_lilypads << 16) | (m_lilypads & 0xffff));
+            return cantor(m_players[0], cantor(m_players[1], m_lilypads));
         }
     };
 
