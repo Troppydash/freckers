@@ -184,10 +184,24 @@ namespace engine {
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
                 } else if (!move.is_grow()) {
+                    // end game rankings
+                    auto start = bitboard::get_coord(move.m_start);
+                    auto end = bitboard::get_coord(move.m_end);
                     auto coord = move.get_coords();
-                    int gap = abs(coord.second / bitboard::COLS - coord.first / bitboard::COLS);
-                    if (gap >= 2) {
-                        score += param::base_score + gap * 10;
+                    int vgap = abs(start.first - end.first);
+                    int hgap = abs(start.second - end.second);
+
+                    bool is_red = m_pos.m_turn == board::RED;
+                    if (!is_red && start.first == 0 || is_red && start.first == bitboard::ROWS - 1) {
+                        // don't consider the move if we started at end
+                        score += 0;
+                    } else if (!is_red && end.first == 0 || is_red && end.first == bitboard::ROWS - 1) {
+                        // do consider the move if we will finish at end
+                        score += param::base_score + param::end_move_score;
+                    } else if (vgap >= 2) {
+                        score += param::base_score + vgap * 10;
+                    } else if (hgap >= 4) {
+                        score += param::base_score + hgap * 2;
                     } else {
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
                         score += history;
@@ -456,19 +470,32 @@ namespace engine {
                 pv_line.clear();
                 int score = negamax(depth, 0, alpha, beta, pv_line);
 
+
                 if (m_timer.m_is_stopped) {
+                    // TODO: also account for asp window
                     if (best_move.is_null() && depth == 1) {
                         best_move = pv_line[0];
                     }
                     break;
                 }
 
+                if (score <= alpha || score >= beta) {
+                    alpha = -param::inf;
+                    beta = param::inf;
+                    continue;
+                }
 
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
 
                 best_move = pv_line[0];
+                if (depth <= 0) {
+                    int gap = 5 * 100;
+                    alpha = score - gap;
+                    beta = score + gap;
+                }
+
 
                 if (verbose) {
                     std::chrono::milliseconds now = m_timer.now();

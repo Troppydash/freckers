@@ -30,6 +30,7 @@ namespace board {
         const static mask BOTTOM = (mask) 0b11111111 << ((ROWS - 1) * COLS);
         const static mask ALL = UINT64_MAX;
         const static mask LINE = 0b100000001000000010000000100000001000000010000000100000001;
+        const static mask HLINE = 0b11111111;
 
         static mask from_array(const std::vector<std::vector<int>> &bits) {
             mask mask = 0ull;
@@ -266,7 +267,7 @@ namespace board {
         pos(mask mLilypads, mask red, mask blue, int mTurn, int mMoves) : m_lilypads(mLilypads), m_players{red, blue},
                                                                           m_turn(mTurn), m_moves(mMoves) {}
 
-        static pos from_string(std::string &text, int turn) {
+        static pos from_string(const std::string &text, int turn) {
             mask red = 0;
             mask blue = 0;
             mask lilypads = 0;
@@ -314,7 +315,9 @@ namespace board {
             mask pieces = player;
             while (pieces > 0) {
                 // get piece mask
-                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pieces) - 1);
+                int i = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pieces) - 1);
+                int row = i / bitboard::ROWS;
+                mask piece = 1ull << i;
                 pieces ^= piece;
 
                 // jumps
@@ -335,8 +338,8 @@ namespace board {
                     all_jumps |= new_jumps;
                 }
 
-
                 all_jumps ^= piece;
+                all_jumps &= ~(bitboard::HLINE << (row*bitboard::COLS));
                 move::from_mask(all_jumps, piece, moves);
             }
 
@@ -430,6 +433,8 @@ namespace board {
             if ((m_players[1 - m_turn] & side[1 - m_turn]) == m_players[1 - m_turn]) {
                 return 1 - m_turn;
             }
+
+            // TODO: also account for more frogs on either side using popcount
             if (m_moves == DRAW_MOVES) {
                 return DRAW;
             }

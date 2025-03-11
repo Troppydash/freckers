@@ -17,6 +17,7 @@ namespace param {
 
     int base_score = (1 << 20);
     int pv_move_score = 100;
+    int end_move_score = 90;
 }
 
 
