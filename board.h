@@ -18,7 +18,7 @@ namespace board {
     const int NONE = 2;
     const int DRAW = 3;
 
-    const int DRAW_MOVES = 1500;
+    const int DRAW_MOVES = 150;
 
     class bitboard {
     public:
@@ -78,6 +78,17 @@ namespace board {
             return left | right | bottom_left | bottom_right | bottom;
         }
 
+        static mask jump_down_forward(mask pos, mask obst) {
+            mask no_left = ALL ^ LINE;
+            mask no_right = ALL ^ (LINE << (COLS - 1));
+
+            // left right, bottom left, bottom, bottom right
+            mask bottom_left = ((((pos << (ROWS - 1)) & no_right) & obst) << (ROWS - 1)) & no_right;
+            mask bottom_right = ((((pos << (ROWS + 1)) & no_left) & obst) << (ROWS + 1)) & no_left;
+            mask bottom = ((((pos << ROWS)) & obst) << ROWS);
+            return bottom_left | bottom_right | bottom;
+        }
+
         static mask dilate_up(mask pos) {
             mask no_left = ALL ^ LINE;
             mask no_right = ALL ^ (LINE << (COLS - 1));
@@ -98,6 +109,17 @@ namespace board {
             mask top_left = ((((pos >> (ROWS + 1)) & no_right) & obst) >> (ROWS + 1)) & no_right;
             mask top = ((((pos >> ROWS)) & obst) >> ROWS);
             return left | right | top_left | top_right | top;
+        }
+
+        static mask jump_up_forward(mask pos, mask obst) {
+            mask no_left = ALL ^ LINE;
+            mask no_right = ALL ^ (LINE << (COLS - 1));
+
+            // left right, top right, top, top left
+            mask top_right = ((((pos >> (ROWS - 1)) & no_left) & obst) >> (ROWS - 1)) & no_left;
+            mask top_left = ((((pos >> (ROWS + 1)) & no_right) & obst) >> (ROWS + 1)) & no_right;
+            mask top = ((((pos >> ROWS)) & obst) >> ROWS);
+            return top_left | top_right | top;
         }
 
         static int get_index(mask pos) {
@@ -239,6 +261,54 @@ namespace board {
             m_moves = 0;
         }
 
+        bool has_jumps() const {
+            mask new_jumps = 0;
+            mask obst = m_players[0] | m_players[1];
+            if (m_turn == RED) {
+                new_jumps = bitboard::jump_down_forward(m_players[m_turn], obst);
+            } else {
+                new_jumps = bitboard::jump_up_forward(m_players[m_turn], obst);
+            }
+
+            new_jumps &= m_lilypads & (~obst);
+            return new_jumps > 0;
+        }
+
+        std::vector<move> get_jump_moves() const {
+            std::vector<move> moves;
+
+            mask player = m_players[m_turn];
+            mask pieces = player;
+            while (pieces > 0) {
+                // get piece mask
+                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pieces) - 1);
+                pieces ^= piece;
+
+                // jumps
+                mask obst = m_players[0] | m_players[1];
+                mask all_jumps = piece;
+                mask next_jumps = piece;
+                while (next_jumps > 0) {
+                    // broadcast
+                    mask new_jumps = 0;
+                    if (m_turn == RED) {
+                        new_jumps = bitboard::jump_down(next_jumps, obst);
+                    } else {
+                        new_jumps = bitboard::jump_up(next_jumps, obst);
+                    }
+
+                    new_jumps &= m_lilypads & (~obst);
+                    next_jumps = new_jumps & (~all_jumps);
+                    all_jumps |= new_jumps;
+                }
+
+
+                all_jumps ^= piece;
+                move::from_mask(all_jumps, piece, moves);
+            }
+
+            return moves;
+        }
 
         std::vector<move> get_moves() const {
             std::vector<move> moves;
@@ -255,7 +325,6 @@ namespace board {
                 // get piece mask
                 mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pieces) - 1);
                 pieces ^= piece;
-
 
                 // direct moves
                 mask direct = 0;
@@ -366,7 +435,7 @@ namespace board {
         }
 
         uint64_t cantor(uint64_t a, uint64_t b) const {
-            return (a+b+1) * (a+b) / 2 + b;
+            return (a + b + 1) * (a + b) / 2 + b;
         }
 
         uint64_t hash() const {

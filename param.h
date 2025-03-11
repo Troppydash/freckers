@@ -15,7 +15,8 @@ namespace param {
 
     int max_depth = 50;
 
-    int pv_move_score = (1 << 30);
+    int base_score = (1 << 20);
+    int pv_move_score = 100;
 }
 
 

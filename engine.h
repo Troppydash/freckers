@@ -142,13 +142,12 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 8) + move;
+                    m_lmr[depth][move] = std::max(1, depth / 10) + move;
                 }
             }
         }
 
         int evaluate() {
-
             int red_total = 6 * 7;
             int blue_total = 6 * 7;
             board::mask m = m_pos.m_players[board::RED];
@@ -170,9 +169,9 @@ namespace engine {
             }
 
             if (m_pos.m_turn == board::RED) {
-                return (red_total - blue_total + 2) * 100;
+                return (red_total - blue_total + 1) * 100;
             } else {
-                return (blue_total - red_total + 2) * 100;
+                return (blue_total - red_total + 1) * 100;
             }
         }
 
@@ -183,14 +182,18 @@ namespace engine {
                 move &move = moves[i];
 
                 if (move == pv_move) {
-                    score += param::pv_move_score;
-                } else {
-                    if (!move.is_grow()) {
-                        auto coord = move.get_coords();
+                    score += param::base_score + param::pv_move_score;
+                } else if (!move.is_grow()) {
+                    auto coord = move.get_coords();
+                    int gap = abs(coord.second - coord.first) / bitboard::COLS;
+                    if (gap > 2) {
+                        score += param::base_score + gap * 10;
+                    } else {
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
                         score += history;
                     }
-
+                } else {
+                    score += __builtin_popcountll(move.m_grow) * 10;
                 }
 
                 scores.push_back({score, i});
@@ -216,7 +219,7 @@ namespace engine {
 
             auto coord = move.get_coords();
             m_history[m_pos.m_turn][coord.first][coord.second] += depth * depth;
-            if (m_history[m_pos.m_turn][coord.first][coord.second] > param::pv_move_score) {
+            if (m_history[m_pos.m_turn][coord.first][coord.second] > param::base_score) {
                 for (auto &i: m_history) {
                     for (auto &j: i) {
                         for (int &k: j) {
@@ -236,6 +239,71 @@ namespace engine {
             if (m_history[m_pos.m_turn][coord.first][coord.second] > 0) {
                 m_history[m_pos.m_turn][coord.first][coord.second] -= 1;
             }
+        }
+
+        int qsearch(int max_ply, int ply, int alpha, int beta, std::vector<move> &pv_line) {
+            m_searched += 1;
+
+            if (m_searched % 2048 == 0) {
+                m_timer.check();
+            }
+
+            if (m_timer.m_is_stopped) {
+                return 0;
+            }
+
+            if ((max_ply + ply) >= param::max_depth) {
+                return evaluate();
+            }
+
+            bool critical = m_pos.has_jumps();
+            int best_score = evaluate();
+
+            if (!critical && best_score >= beta) {
+                return best_score;
+            }
+
+            if (best_score > alpha) {
+                alpha = best_score;
+            }
+
+            std::vector<move> moves = m_pos.get_jump_moves();
+            auto null = move::null();
+            auto scored_moves = score_moves(moves, null);
+
+            std::vector<move> child_pv_line;
+
+            for (int i = 0; i < moves.size(); ++i) {
+                sort_scored_moves(scored_moves, i);
+                move &move = moves[scored_moves[i].second];
+
+                m_pos.push(move);
+
+                int score = -qsearch(max_ply, ply + 1, -beta, -alpha, child_pv_line);
+
+                m_pos.pop(move);
+
+                if (score > best_score) {
+                    best_score = score;
+                }
+
+                if (score >= beta) {
+                    break;
+                }
+
+                if (score > alpha) {
+                    alpha = score;
+                    pv_line.clear();
+                    pv_line.push_back(move);
+                    for (auto m: child_pv_line) {
+                        pv_line.push_back(m);
+                    }
+                }
+
+                child_pv_line.clear();
+            }
+
+            return best_score;
         }
 
         int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line) {
@@ -264,7 +332,7 @@ namespace engine {
             bool is_pv_node = (beta - alpha) != 1;
 
             if (depth <= 0) {
-                return evaluate();
+                return qsearch(ply, 0, alpha, beta, pv_line);
             }
 
             auto &entry = m_tt.probe(m_pos.hash());
@@ -388,22 +456,11 @@ namespace engine {
                 }
 
 
-                if (score <= alpha || score >= beta) {
-                    alpha = -param::inf;
-                    beta = param::inf;
-                    if (verbose) {
-                        printf("re-search\n");
-                    }
-                    continue;
-                }
-
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
 
                 best_move = pv_line[0];
-                alpha = score - 5 * 100;
-                beta = score + 5 * 100;
 
                 if (verbose) {
                     std::chrono::milliseconds now = m_timer.now();
