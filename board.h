@@ -312,13 +312,10 @@ namespace board {
         }
 
         int get_state() const {
-            if ((m_players[RED] & bitboard::BOTTOM) == m_players[RED]) {
-                return RED;
+            mask side[2] = {bitboard::BOTTOM, bitboard::TOP};
+            if ((m_players[1-m_turn] & side[1-m_turn]) == m_players[1-m_turn]) {
+                return 1-m_turn;
             }
-            if ((m_players[BLUE] & bitboard::TOP) == m_players[BLUE]) {
-                return BLUE;
-            }
-
             if (m_moves == DRAW_MOVES) {
                 return DRAW;
             }
