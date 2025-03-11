@@ -293,6 +293,7 @@ namespace board {
         }
 
         bool has_jumps() const {
+            // TODO: fix this so that it detects any series of forward jumps not just immediate
             mask new_jumps = 0;
             mask obst = m_players[0] | m_players[1];
             if (m_turn == RED) {
@@ -306,6 +307,7 @@ namespace board {
         }
 
         std::vector<move> get_jump_moves() const {
+            // TODO: filter out horizontal jumps
             std::vector<move> moves;
 
             mask player = m_players[m_turn];

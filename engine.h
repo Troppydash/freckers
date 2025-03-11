@@ -185,8 +185,8 @@ namespace engine {
                     score += param::base_score + param::pv_move_score;
                 } else if (!move.is_grow()) {
                     auto coord = move.get_coords();
-                    int gap = abs(coord.second - coord.first) / bitboard::COLS;
-                    if (gap >= 1) {
+                    int gap = abs(coord.second / bitboard::COLS - coord.first / bitboard::COLS);
+                    if (gap >= 2) {
                         score += param::base_score + gap * 10;
                     } else {
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
