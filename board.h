@@ -31,6 +31,9 @@ namespace board {
         const static mask ALL = UINT64_MAX;
         const static mask LINE = 0b100000001000000010000000100000001000000010000000100000001;
         const static mask HLINE = 0b11111111;
+        const static mask TOP_HALF = (HLINE) | (HLINE << (1 * COLS)) | (HLINE << (2 * COLS)) | (HLINE << (3 * COLS));
+        const static mask BOTTOM_HALF =
+                (HLINE << (4 * COLS)) | (HLINE << (5 * COLS)) | (HLINE << (6 * COLS)) | (HLINE << (7 * COLS));
 
         static mask from_array(const std::vector<std::vector<int>> &bits) {
             mask mask = 0ull;
@@ -308,7 +311,6 @@ namespace board {
         }
 
         std::vector<move> get_jump_moves() const {
-            // TODO: filter out horizontal jumps
             std::vector<move> moves;
 
             mask player = m_players[m_turn];
@@ -339,7 +341,7 @@ namespace board {
                 }
 
                 all_jumps ^= piece;
-                all_jumps &= ~(bitboard::HLINE << (row*bitboard::COLS));
+                all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
                 move::from_mask(all_jumps, piece, moves);
             }
 
@@ -436,6 +438,16 @@ namespace board {
 
             // TODO: also account for more frogs on either side using popcount
             if (m_moves == DRAW_MOVES) {
+                // count side
+                int red_frogs = __builtin_popcountll(m_players[board::RED] & bitboard::BOTTOM_HALF);
+                int blue_frogs = __builtin_popcountll(m_players[board::BLUE] & bitboard::TOP_HALF);
+
+                if (red_frogs > blue_frogs) {
+                    return board::RED;
+                } else if (blue_frogs > red_frogs) {
+                    return board::BLUE;
+                }
+
                 return DRAW;
             }
 

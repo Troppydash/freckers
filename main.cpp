@@ -57,7 +57,7 @@ void test_position() {
                          "5 _ _ _ . R . . _ \n"
                          "6 _ R _ _ . _ R _ \n"
                          "7 _ R R _ _ _ _ _ \n"
-                         "  0 1 2 3 4 5 6 7"}, {board::RED, "game in 11"}},
+                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 11"}},
             {std::string{"0 _ _ _ B _ _ . _ \n"
                          "1 _ _ _ B B _ . _ \n"
                          "2 . _ _ _ _ _ _ . \n"
@@ -66,7 +66,7 @@ void test_position() {
                          "5 _ _ _ . _ . . _ \n"
                          "6 _ R _ _ . _ R _ \n"
                          "7 _ R R _ _ _ _ _ \n"
-                         "  0 1 2 3 4 5 6 7"},  {board::RED, "game in 13?"}},
+                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 13?"}},
             {std::string{"0 _ _ _ B _ _ . _ \n"
                          "1 _ _ _ B B _ . _ \n"
                          "2 . _ _ _ _ _ _ . \n"
@@ -107,21 +107,26 @@ int main() {
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
         } else {
-//            engine::computer engine{pos};
-//            auto move = engine.search(1000, nullptr, true);
-            board::move goal;
-            for (auto m : pos.get_moves()) {
-                if (m.is_grow()) {
-                    goal = m;
-                    break;
-                }
-            }
-//            std::cout << "move " << move.display() << std::endl;
-            pos.push(goal);
+//            board::move goal;
+//            for (auto m : pos.get_moves()) {
+//                if (m.is_grow()) {
+//                    goal = m;
+//                    break;
+//                }
+//            }
+//            pos.push(goal);
+
+
+            engine::computer engine{pos};
+            auto move = engine.search(1000, nullptr, true);
+            std::cout << "move " << move.display() << std::endl;
+            pos.push(move);
         }
 
         std::cout << "\n";
     }
+
+    std::cout << "winner: " << pos.get_state() << "\n";
 
     return 0;
 }

@@ -270,7 +270,9 @@ namespace engine {
             int state = m_pos.get_state();
             if (state == board::DRAW) {
                 return 0;
-            } else if (state != board::NONE) {
+            } else if (state == m_pos.m_turn) {
+                return param::inf - ply;
+            } else if (state == 1 - m_pos.m_turn) {
                 return -param::inf + ply;
             }
 
@@ -342,7 +344,9 @@ namespace engine {
             int state = m_pos.get_state();
             if (state == board::DRAW) {
                 return 0;
-            } else if (state != board::NONE) {
+            } else if (state == m_pos.m_turn) {
+                return param::inf - ply;
+            } else if (state == 1 - m_pos.m_turn) {
                 return -param::inf + ply;
             }
 
