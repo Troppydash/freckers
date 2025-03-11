@@ -2,6 +2,46 @@
 #include "board.h"
 #include "engine.h"
 
+
+extern "C" {
+int last_score = 0;
+
+uint64_t last_move_start = 0;
+uint64_t last_move_end = 0;
+bool last_move_grow = false;
+
+void play(uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves, int ts, bool verbose) {
+    board::pos pos{lily, red, blue, turn, moves};
+    engine::computer engine{pos};
+    auto result = engine.search(ts, &last_score, verbose);
+
+    if (result.is_grow()) {
+        last_move_grow = true;
+    } else {
+        last_move_start = result.m_start;
+        last_move_end = result.m_end;
+    }
+}
+
+int get_last_score() {
+    return last_score;
+}
+
+uint64_t get_last_move_start() {
+    return last_move_start;
+}
+
+uint64_t get_last_move_end() {
+    return last_move_end;
+}
+
+bool get_last_move_grow() {
+    return last_move_grow;
+}
+
+}
+
+
 int randint(int high) {
     return rand() % high;
 }
