@@ -436,7 +436,6 @@ namespace board {
                 return 1 - m_turn;
             }
 
-            // TODO: also account for more frogs on either side using popcount
             if (m_moves == DRAW_MOVES) {
                 // count side
                 int red_frogs = __builtin_popcountll(m_players[board::RED] & bitboard::BOTTOM_HALF);

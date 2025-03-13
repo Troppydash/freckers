@@ -83,7 +83,7 @@ void test_position() {
         board::pos pos = board::pos::from_string(pair.first, pair.second.first);
         std::cout << pos.display() << "\n";
         engine::computer engine{pos};
-        engine.search(1000, nullptr, true);
+        engine.search(3000, nullptr, true);
         std::cout << "[actual] " << pair.second.second << "\n\n";
     }
 
@@ -91,8 +91,11 @@ void test_position() {
 }
 
 int main() {
-//    test_position();
-//    return 0;
+
+    // board::mask m = 0b0011010;  // ctz = 3, clz = 60, popcount = 2
+
+    // test_position();
+    // return 0;
     srand(42);
 
     board::pos pos;
