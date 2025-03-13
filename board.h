@@ -348,6 +348,11 @@ namespace board {
             return moves;
         }
 
+        int num_unfinished_piece() {
+            return 6 - __builtin_popcountll(m_players[RED] & bitboard::BOTTOM) + 6 -
+                   __builtin_popcountll(m_players[BLUE] & bitboard::TOP);
+        }
+
         std::vector<move> get_moves() const {
             std::vector<move> moves;
 
@@ -403,8 +408,9 @@ namespace board {
         }
 
         void push(move &play) {
-            if (play.is_null()) {}
-            else if (play.is_grow()) {
+            if (play.is_null()) {
+                m_moves -= 1;
+            } else if (play.is_grow()) {
                 m_lilypads |= play.m_grow;
             } else {
                 m_lilypads ^= play.m_start;
@@ -420,8 +426,9 @@ namespace board {
             m_turn = 1 - m_turn;
             m_moves -= 1;
 
-            if (play.is_null()) {}
-            else if (play.is_grow()) {
+            if (play.is_null()) {
+                m_moves += 1;
+            } else if (play.is_grow()) {
                 m_lilypads ^= play.m_grow;
             } else {
                 m_lilypads |= play.m_start;

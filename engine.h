@@ -142,13 +142,13 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 3;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 1;
                 }
             }
         }
 
         int evaluate() {
-            int v_scores[] = {0, 1, 2, 3, 5, 8, 12, 20};
+            int v_scores[] = {0, 1, 2, 3, 5, 8, 13, 21};
             int h_scores[] = {0, 0, 0, 0, 0, 0, 0, 0};
             // compute distance heuristic
             // shorter dist to end the better
@@ -416,7 +416,7 @@ namespace engine {
             return best_score;
         }
 
-        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line) {
+        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, bool do_null = true) {
             m_searched += 1;
 
             if (m_searched % 2048 == 0) {
@@ -458,6 +458,24 @@ namespace engine {
 
 
             // null move pruning
+            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4) {
+                move null = move::null();
+                m_pos.push(null);
+
+                int r = 2;
+                std::vector<move> child_pv_line;
+                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+                m_pos.pop(null);
+
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
+
+                if (score >= beta) {
+                    return beta;
+                }
+            }
+
 
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
