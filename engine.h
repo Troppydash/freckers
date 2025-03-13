@@ -142,13 +142,13 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 2;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 3;
                 }
             }
         }
 
         int evaluate() {
-            int v_scores[] = {0, 1, 2, 3, 5, 8, 10, 20};
+            int v_scores[] = {0, 1, 2, 3, 5, 8, 12, 20};
             int h_scores[] = {0, 0, 0, 0, 0, 0, 0, 0};
             // compute distance heuristic
             // shorter dist to end the better
@@ -170,7 +170,7 @@ namespace engine {
                 m ^= piece;
 
                 auto coord = bitboard::get_coord(piece);
-                blue_total += v_scores[7- coord.first] + h_scores[coord.second];
+                blue_total += v_scores[7 - coord.first] + h_scores[coord.second];
             }
 
             int distance_heuristic = 0;
@@ -277,10 +277,10 @@ namespace engine {
                     int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    if (!is_red && start.first == 0 || is_red && start.first == bitboard::ROWS - 1) {
+                    if ((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) {
                         // don't consider the move if we started at end
                         score += 0;
-                    } else if (!is_red && end.first == 0 || is_red && end.first == bitboard::ROWS - 1) {
+                    } else if ((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
                     } else if (vgap >= 2) {
@@ -456,6 +456,9 @@ namespace engine {
             auto moves = m_pos.get_moves();
             auto scored_moves = score_moves(moves, tt_move);
 
+
+            // null move pruning
+
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
             move best_move = move::null();
@@ -519,7 +522,6 @@ namespace engine {
                 }
 
                 child_pv_line.clear();
-
             }
 
             if (depth > entry.m_depth && !m_timer.m_is_stopped) {

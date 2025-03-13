@@ -1,8 +1,7 @@
 #include <iostream>
-#include <map>
+#include <fstream>
 #include "board.h"
 #include "engine.h"
-
 
 extern "C" {
 int last_score = 0;
@@ -48,44 +47,77 @@ int randint(int high) {
 }
 
 void test_position() {
-    std::map<std::string, std::pair<int, std::string>> test_cases = {
-            {std::string{"0 _ _ _ B _ B . _ \n"
-                         "1 _ _ _ B B _ . _ \n"
-                         "2 . _ _ _ _ _ _ . \n"
-                         "3 . _ _ B . . _ . \n"
-                         "4 . . . . . R B _ \n"
-                         "5 _ _ _ . R . . _ \n"
-                         "6 _ R _ _ . _ R _ \n"
-                         "7 _ R R _ _ _ _ _ \n"
-                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 11"}},
-            {std::string{"0 _ _ _ B _ _ . _ \n"
-                         "1 _ _ _ B B _ . _ \n"
-                         "2 . _ _ _ _ _ _ . \n"
-                         "3 . _ _ B . . _ . \n"
-                         "4 . . . B R R B _ \n"
-                         "5 _ _ _ . _ . . _ \n"
-                         "6 _ R _ _ . _ R _ \n"
-                         "7 _ R R _ _ _ _ _ \n"
-                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 13?"}},
-            {std::string{"0 _ _ _ B _ _ . _ \n"
-                         "1 _ _ _ B B _ . _ \n"
-                         "2 . _ _ _ _ _ _ . \n"
-                         "3 . _ _ B . . _ . \n"
-                         "4 . . . B . R B _ \n"
-                         "5 _ _ _ . R . . _ \n"
-                         "6 _ R _ _ . _ R _ \n"
-                         "7 _ R R _ _ _ _ _ \n"
-                         "  0 1 2 3 4 5 6 7 "}, {board::BLUE, "game in -12?"}}
+    std::string file = "../positions.txt";
+    std::ifstream buf{file};
 
-    };
+    std::string tmp;
+    while (buf >> tmp) {
+        std::string board;
+        for (int i = 0; i < 10; ++i) {
+            std::string newline;
+            std::getline(buf, newline);
+            board += newline + "\n";
+        }
 
-    for (auto &pair: test_cases) {
-        board::pos pos = board::pos::from_string(pair.first, pair.second.first);
-        std::cout << pos.display() << "\n";
+        std::string turn;
+        buf >> turn;
+        int t = board::NONE;
+        if (turn == "RED") {
+            t = board::RED;
+        } else if (turn == "BLUE") {
+            t = board::BLUE;
+        }
+
+        int win;
+        buf >> win;
+
+        board::pos pos = board::pos::from_string(board, t);
+        std::cout << "[board]\n" << pos.display() << "\n";
         engine::computer engine{pos};
         engine.search(3000, nullptr, true);
-        std::cout << "[actual] " << pair.second.second << "\n\n";
+        std::cout << "[real] " << win << "\n\n";
+
     }
+
+//
+//    std::map<std::string, std::pair<int, std::string>> test_cases = {
+//            {std::string{"0 _ _ _ B _ B . _ \n"
+//                         "1 _ _ _ B B _ . _ \n"
+//                         "2 . _ _ _ _ _ _ . \n"
+//                         "3 . _ _ B . . _ . \n"
+//                         "4 . . . . . R B _ \n"
+//                         "5 _ _ _ . R . . _ \n"
+//                         "6 _ R _ _ . _ R _ \n"
+//                         "7 _ R R _ _ _ _ _ \n"
+//                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 11"}},
+//            {std::string{"0 _ _ _ B _ _ . _ \n"
+//                         "1 _ _ _ B B _ . _ \n"
+//                         "2 . _ _ _ _ _ _ . \n"
+//                         "3 . _ _ B . . _ . \n"
+//                         "4 . . . B R R B _ \n"
+//                         "5 _ _ _ . _ . . _ \n"
+//                         "6 _ R _ _ . _ R _ \n"
+//                         "7 _ R R _ _ _ _ _ \n"
+//                         "  0 1 2 3 4 5 6 7"},  {board::RED,  "game in 13?"}},
+//            {std::string{"0 _ _ _ B _ _ . _ \n"
+//                         "1 _ _ _ B B _ . _ \n"
+//                         "2 . _ _ _ _ _ _ . \n"
+//                         "3 . _ _ B . . _ . \n"
+//                         "4 . . . B . R B _ \n"
+//                         "5 _ _ _ . R . . _ \n"
+//                         "6 _ R _ _ . _ R _ \n"
+//                         "7 _ R R _ _ _ _ _ \n"
+//                         "  0 1 2 3 4 5 6 7 "}, {board::BLUE, "game in -12?"}}
+//
+//    };
+//
+//    for (auto &pair: test_cases) {
+//        board::pos pos = board::pos::from_string(pair.first, pair.second.first);
+//        std::cout << pos.display() << "\n";
+//        engine::computer engine{pos};
+//        engine.search(3000, nullptr, true);
+//        std::cout << "[actual] " << pair.second.second << "\n\n";
+//    }
 
 
 }
@@ -94,8 +126,8 @@ int main() {
 
     // board::mask m = 0b0011010;  // ctz = 3, clz = 60, popcount = 2
 
-    // test_position();
-    // return 0;
+     test_position();
+     return 0;
     srand(42);
 
     board::pos pos;
