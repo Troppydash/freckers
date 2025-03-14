@@ -6,21 +6,14 @@
 extern "C" {
 int last_score = 0;
 
-uint64_t last_move_start = 0;
-uint64_t last_move_end = 0;
-bool last_move_grow = false;
+board::move last_move;
 
 void play(uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves, int ts, bool verbose) {
     board::pos pos{lily, red, blue, turn, moves};
     engine::computer engine{pos};
     auto result = engine.search(ts, &last_score, verbose);
 
-    if (result.is_grow()) {
-        last_move_grow = true;
-    } else {
-        last_move_start = result.m_start;
-        last_move_end = result.m_end;
-    }
+    last_move = result;
 }
 
 int get_last_score() {
@@ -28,18 +21,19 @@ int get_last_score() {
 }
 
 uint64_t get_last_move_start() {
-    return last_move_start;
+    return last_move.m_start;
 }
 
 uint64_t get_last_move_end() {
-    return last_move_end;
+    return last_move.m_end;
 }
 
-bool get_last_move_grow() {
-    return last_move_grow;
+uint64_t get_last_move_grow() {
+    return last_move.m_grow;
 }
 
 board::pos last_pos;
+std::vector<board::move> last_moves;
 
 void pos_default() {
     last_pos = board::pos{};
@@ -66,6 +60,48 @@ void pos_pop(uint64_t grow, uint64_t start, uint64_t end) {
 int pos_state() {
     return last_pos.get_state();
 }
+
+uint64_t pos_lily() {
+    return last_pos.m_lilypads;
+}
+
+uint64_t pos_red() {
+    return last_pos.m_players[board::RED];
+}
+
+uint64_t pos_blue() {
+    return last_pos.m_players[board::BLUE];
+}
+
+int pos_moves() {
+    return last_pos.m_moves;
+}
+
+int pos_turn() {
+    return last_pos.m_turn;
+}
+
+void pos_compute_moves() {
+    last_moves = last_pos.get_moves();
+}
+
+int pos_moves_length() {
+    return last_moves.size();
+}
+
+uint64_t pos_moves_start(int i) {
+    return last_moves[i].m_start;
+}
+
+uint64_t pos_moves_end(int i) {
+    return last_moves[i].m_end;
+}
+
+uint64_t pos_moves_grow(int i) {
+    return last_moves[i].m_grow;
+}
+
+
 
 }
 
@@ -153,10 +189,10 @@ void test_position() {
 int main() {
 
     // board::mask m = 0b0011010;  // ctz = 3, clz = 60, popcount = 2
-
-     test_position();
-     return 0;
-    srand(42);
+//
+//     test_position();
+//     return 0;
+//    srand(42);
 
     board::pos pos;
 
@@ -176,16 +212,6 @@ int main() {
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
         } else {
-//            board::move goal;
-//            for (auto m : pos.get_moves()) {
-//                if (m.is_grow()) {
-//                    goal = m;
-//                    break;
-//                }
-//            }
-//            pos.push(goal);
-
-
             engine::computer engine{pos};
             auto move = engine.search(1000, nullptr, true);
             std::cout << "move " << move.display() << std::endl;
