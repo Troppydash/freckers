@@ -132,7 +132,7 @@ namespace engine {
 
         explicit computer(pos pos)
                 : m_tt(64), m_pos(pos), m_searched(0), m_timer() {
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < 3; ++i) {
                 for (int j = 0; j < 64; ++j) {
                     for (int k = 0; k < 64; ++k) {
                         m_history[i][j][k] = 0;
@@ -142,21 +142,26 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 2;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 1;
                 }
             }
         }
 
         int evaluate() {
-            int red_total = 6 * 7;
-            int blue_total = 6 * 7;
+            int v_scores[] = {0, 1, 2, 3, 5, 8, 13, 21};
+            int h_scores[] = {0, 0, 0, 0, 0, 0, 0, 0};
+            // compute distance heuristic
+            // shorter dist to end the better
+            int red_total = 0;
+            int blue_total = 0;
+
             board::mask m = m_pos.m_players[board::RED];
             while (m > 0) {
                 mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
                 m ^= piece;
 
                 auto coord = bitboard::get_coord(piece);
-                red_total -= (7 - coord.first);
+                red_total += v_scores[coord.first] + h_scores[coord.second];
             }
 
             m = m_pos.m_players[board::BLUE];
@@ -165,14 +170,94 @@ namespace engine {
                 m ^= piece;
 
                 auto coord = bitboard::get_coord(piece);
-                blue_total -= coord.first;
+                blue_total += v_scores[7 - coord.first] + h_scores[coord.second];
             }
 
+            int distance_heuristic = 0;
             if (m_pos.m_turn == board::RED) {
-                return (red_total - blue_total + 1) * 100;
+                distance_heuristic = (red_total - blue_total) * 100;
             } else {
-                return (blue_total - red_total + 1) * 100;
+                distance_heuristic = (blue_total - red_total) * 100;
             }
+
+
+            // lilypad piece heuristic
+            // the more lilypads and more our piece and fewer their piece, the better
+            //
+            // double red_lilypads = 0;
+            // double red_own_pieces = 0;
+            // double red_other_pieces = 0;
+            //
+            // double blue_lilypads = 0;
+            // double blue_own_pieces = 0;
+            // double blue_other_pieces = 0;
+            // m = m_pos.m_players[board::RED];
+            // while (m > 0) {
+            //     mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+            //     m ^= piece;
+            //
+            //     auto coord = bitboard::get_coord(piece);
+            //
+            //     mask lines = bitboard::LINE | (bitboard::LINE << 1) | (bitboard::LINE << 2);
+            //     mask left_filter = ~bitboard::LINE;
+            //     mask right_filter = ~(bitboard::LINE << (bitboard::COLS - 1));
+            //     mask filter = bitboard::ALL;
+            //     if (coord.second == 0) {
+            //         filter = right_filter;
+            //     } else if (coord.second == bitboard::COLS-1) {
+            //         filter = left_filter;
+            //     }
+            //     // no last row
+            //     // filter &= ~(bitboard::BOTTOM);
+            //
+            //     mask front = (lines << (bitboard::COLS * (coord.first+1) + (coord.second-1))) & filter;
+            //     int bits = __builtin_popcountll(front);
+            //     if (bits == 0)
+            //         continue;
+            //     red_lilypads += (double)__builtin_popcountll(m_pos.m_lilypads & front) / bits;
+            //     red_own_pieces += (double)__builtin_popcountll(m_pos.m_players[board::RED] & front) / bits;
+            //     red_other_pieces += (double)__builtin_popcountll(m_pos.m_players[board::BLUE] & front) / bits;
+            // }
+            //
+            // m = m_pos.m_players[board::BLUE];
+            // while (m > 0) {
+            //     mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+            //     m ^= piece;
+            //
+            //     auto coord = bitboard::get_coord(piece);
+            //
+            //     mask lines = bitboard::LINE | (bitboard::LINE << 1) | (bitboard::LINE << 2);
+            //     mask left_filter = ~bitboard::LINE;
+            //     mask right_filter = ~(bitboard::LINE << (bitboard::COLS - 1));
+            //     mask filter = bitboard::ALL;
+            //     if (coord.second == 0) {
+            //         filter = right_filter;
+            //     } else if (coord.second == bitboard::COLS-1) {
+            //         filter = left_filter;
+            //     }
+            //     // no last row
+            //     // filter &= ~(bitboard::TOP);
+            //
+            //     // TODO: shift this
+            //     mask front = (lines >> (bitboard::COLS * (bitboard::ROWS-coord.first) + (1-coord.second))) & filter;
+            //     int bits = __builtin_popcountll(front);
+            //     if (bits == 0)
+            //         continue;
+            //     blue_lilypads += (double)__builtin_popcountll(m_pos.m_lilypads & front) / bits;
+            //     blue_own_pieces += (double)__builtin_popcountll(m_pos.m_players[board::BLUE] & front) / bits;
+            //     blue_other_pieces += (double)__builtin_popcountll(m_pos.m_players[board::RED] & front) / bits;
+            // }
+
+            // average is 12 lilypads,
+            // average is 1 piece
+            // (red_lilypads - blue_lilypads) * 100.0 / 24.0
+            // double front_heuristic = - (red_own_pieces - blue_own_pieces) * 100.0 / 10.0 + (red_other_pieces - blue_other_pieces) * 100.0 / 10.0;
+            // if (m_pos.m_turn == board::BLUE) {
+            //     front_heuristic *= -1;
+            // }
+            // std::cout << front_heuristic << std::endl;
+
+            return distance_heuristic + 100;
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move) {
@@ -192,22 +277,23 @@ namespace engine {
                     int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    if (!is_red && start.first == 0 || is_red && start.first == bitboard::ROWS - 1) {
+                    if ((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) {
                         // don't consider the move if we started at end
                         score += 0;
-                    } else if (!is_red && end.first == 0 || is_red && end.first == bitboard::ROWS - 1) {
+                    } else if ((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
                     } else if (vgap >= 2) {
                         score += param::base_score + vgap * 10;
-                    } else if (hgap >= 4) {
-                        score += param::base_score + hgap * 2;
+                    } else if (hgap >= 2) {
+                        // dont consider large h moves
+                        score += 0;
                     } else {
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
                         score += history;
                     }
                 } else {
-                    score += __builtin_popcountll(move.m_grow) * 10;
+                    score += __builtin_popcountll(move.m_grow) * 100;
                 }
 
                 scores.push_back({score, i});
@@ -330,7 +416,7 @@ namespace engine {
             return best_score;
         }
 
-        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line) {
+        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, bool do_null = true) {
             m_searched += 1;
 
             if (m_searched % 2048 == 0) {
@@ -369,6 +455,27 @@ namespace engine {
 
             auto moves = m_pos.get_moves();
             auto scored_moves = score_moves(moves, tt_move);
+
+
+            // null move pruning
+            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
+                move null = move::null();
+                m_pos.push(null);
+
+                int r = 4;
+                std::vector<move> child_pv_line;
+                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+                m_pos.pop(null);
+
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
+
+                if (score >= beta) {
+                    return beta;
+                }
+            }
+
 
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
@@ -433,7 +540,6 @@ namespace engine {
                 }
 
                 child_pv_line.clear();
-
             }
 
             if (depth > entry.m_depth && !m_timer.m_is_stopped) {

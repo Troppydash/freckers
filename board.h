@@ -463,9 +463,14 @@ namespace board
             return moves;
         }
 
+        int num_unfinished_piece() {
+            return 6 - __builtin_popcountll(m_players[RED] & bitboard::BOTTOM) + 6 -
+                   __builtin_popcountll(m_players[BLUE] & bitboard::TOP);
+        }
+
         //??
-        std::vector<move> get_moves() const
-        {
+        std::vector<move> get_moves() const {
+
             std::vector<move> moves;
 
             // first handle grow
@@ -527,16 +532,14 @@ namespace board
             return moves;
         }
 
+
         // A function to do the move
-        void push(move& play)
-        {
-            if (play.is_null())
-            {
+        void push(move &play) {
+            if (play.is_null()) {
                 // If the move is empty
                 // Do nothing
-            }
-            else if (play.is_grow())
-            {
+                m_moves -= 1;
+            } else if (play.is_grow()) {
                 // If the move is a grow move
                 // Add all the growing lily pad to the current lily pad
                 m_lilypads |= play.m_grow;
@@ -566,13 +569,11 @@ namespace board
             // Decrease the move counter
             m_moves -= 1;
 
-            if (play.is_null())
-            {
+            if (play.is_null()) {
                 // If the move is empty
                 // Do nothing
-            }
-            else if (play.is_grow())
-            {
+                m_moves += 1;
+            } else if (play.is_grow()) {
                 // If the move WAS a grow move
                 // Remove all the growing lily pad from the current lily pad
                 m_lilypads ^= play.m_grow;
@@ -606,8 +607,7 @@ namespace board
 
             // If the other hasn't won yet
             // Check if the number of move exceed or equal to the draw move
-            if (m_moves == DRAW_MOVES)
-            {
+            if (m_moves == DRAW_MOVES) {
                 // Get the number of red frogs on the half of the board from its winning side
                 int red_frogs = __builtin_popcountll(m_players[board::RED] & bitboard::BOTTOM_HALF);
                 // Get the number of blue frogs on the half of the board from its winning side
