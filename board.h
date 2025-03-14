@@ -6,10 +6,10 @@
 #define FRECKER_BOARD_H
 
 #include <cinttypes>
-#include <vector>
-#include <string>
 #include <cstdio>
 #include <sstream>
+#include <string>
+#include <vector>
 
 namespace board {
     using mask = uint64_t;
@@ -63,8 +63,7 @@ namespace board {
             // left right, bottom left, bottom, bottom right, top right, top, top left
             //??
             mask result = ((pos >> 1) & no_right) | ((pos << 1) & no_left) |
-                          ((pos << (ROWS - 1)) & no_right) | (pos << (ROWS)) | ((pos << (ROWS + 1)) & no_left)
-                          | ((pos >> (ROWS - 1)) & no_left) | (pos >> (ROWS)) | ((pos >> (ROWS + 1)) & no_right);
+                          ((pos << (ROWS - 1)) & no_right) | (pos << (ROWS)) | ((pos << (ROWS + 1)) & no_left) | ((pos >> (ROWS - 1)) & no_left) | (pos >> (ROWS)) | ((pos >> (ROWS + 1)) & no_right);
 
             return result;
         }
@@ -258,39 +257,39 @@ namespace board {
         pos() {
             // Initialise the initial position of the lily pads
             m_lilypads = bitboard::from_array({
-                                                      {1, 1, 1, 1, 1, 1, 1, 1},
-                                                      {0, 1, 1, 1, 1, 1, 1, 0},
-                                                      {0, 0, 0, 0, 0, 0, 0, 0},
-                                                      {0, 0, 0, 0, 0, 0, 0, 0},
-                                                      {0, 0, 0, 0, 0, 0, 0, 0},
-                                                      {0, 0, 0, 0, 0, 0, 0, 0},
-                                                      {0, 1, 1, 1, 1, 1, 1, 0},
-                                                      {1, 1, 1, 1, 1, 1, 1, 1},
-                                              });
+                    {1, 1, 1, 1, 1, 1, 1, 1},
+                    {0, 1, 1, 1, 1, 1, 1, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 1, 1, 1, 1, 1, 1, 0},
+                    {1, 1, 1, 1, 1, 1, 1, 1},
+            });
 
             // Initialise the initial position of the red frog
             m_players[0] = bitboard::from_array({
-                                                        {0, 1, 1, 1, 1, 1, 1, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                });
+                    {0, 1, 1, 1, 1, 1, 1, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+            });
 
             // Initialise the initial position of the blue frog
             m_players[1] = bitboard::from_array({
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 0, 0, 0, 0, 0, 0, 0},
-                                                        {0, 1, 1, 1, 1, 1, 1, 0},
-                                                });
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 0, 0, 0, 0, 0, 0, 0},
+                    {0, 1, 1, 1, 1, 1, 1, 0},
+            });
 
             // First turn is the red frog
             m_turn = RED;
@@ -325,11 +324,11 @@ namespace board {
                     if (tmp == "_") {
                         lilypads |= (1ull << i);
                     }
-                        // Update the bitmask position of the red frog
+                    // Update the bitmask position of the red frog
                     else if (tmp == "R") {
                         red |= (1ull << i);
                     }
-                        // Update the bitmask position of the blue frog
+                    // Update the bitmask position of the blue frog
                     else if (tmp == "B") {
                         blue |= (1ull << i);
                     }
@@ -600,7 +599,7 @@ namespace board {
             return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
         }
     };
-}
+}// namespace board
 
 
-#endif //FRECKER_BOARD_H
+#endif//FRECKER_BOARD_H
