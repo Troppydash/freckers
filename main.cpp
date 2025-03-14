@@ -154,8 +154,8 @@ int main() {
 
     // board::mask m = 0b0011010;  // ctz = 3, clz = 60, popcount = 2
 
-//     test_position();
-//     return 0;
+     test_position();
+     return 0;
     srand(42);
 
     board::pos pos;
