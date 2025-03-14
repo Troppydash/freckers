@@ -39,6 +39,34 @@ bool get_last_move_grow() {
     return last_move_grow;
 }
 
+board::pos last_pos;
+
+void pos_default() {
+    last_pos = board::pos{};
+}
+
+void pos_load(uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves) {
+    last_pos = board::pos{lily, red, blue, turn, moves};
+}
+
+void pos_display() {
+    std::cout << last_pos.display() << std::endl;
+}
+
+void pos_push(uint64_t grow, uint64_t start, uint64_t end) {
+    board::move m{grow, start, end};
+    last_pos.push(m);
+}
+
+void pos_pop(uint64_t grow, uint64_t start, uint64_t end) {
+    board::move m{grow, start, end};
+    last_pos.pop(m);
+}
+
+int pos_state() {
+    return last_pos.get_state();
+}
+
 }
 
 
@@ -134,6 +162,12 @@ int main() {
 
 
     while (pos.get_state() == board::NONE) {
+        if (pos.m_turn == board::RED) {
+            std::cout << "RED\n";
+        } else {
+            std::cout << "BLUE\n";
+        }
+
         std::cout << pos.display() << std::endl;
 
         if (pos.m_turn == board::RED) {
