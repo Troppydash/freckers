@@ -458,23 +458,23 @@ namespace engine {
 
 
             // null move pruning
-            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
-                move null = move::null();
-                m_pos.push(null);
-
-                int r = 4;
-                std::vector<move> child_pv_line;
-                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
-                m_pos.pop(null);
-
-                if (m_timer.m_is_stopped) {
-                    return 0;
-                }
-
-                if (score >= beta) {
-                    return beta;
-                }
-            }
+//            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
+//                move null = move::null();
+//                m_pos.push(null);
+//
+//                int r = 4;
+//                std::vector<move> child_pv_line;
+//                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+//                m_pos.pop(null);
+//
+//                if (m_timer.m_is_stopped) {
+//                    return 0;
+//                }
+//
+//                if (score >= beta) {
+//                    return beta;
+//                }
+//            }
 
 
             std::vector<move> child_pv_line;

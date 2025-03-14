@@ -1,106 +1,121 @@
 #include <iostream>
 #include <fstream>
+#include <map>
 #include "board.h"
 #include "engine.h"
 
+struct instance {
+    int last_score;
+    board::move last_move;
+    board::pos last_pos;
+    std::vector<board::move> last_moves;
+};
+
 extern "C" {
-int last_score = 0;
+std::map<int, instance> instances;
+int next_handle = 0;
 
-board::move last_move;
+int make_instance() {
+    instances[next_handle] = {0, {}, {}, {}};
+    next_handle += 1;
+    return next_handle - 1;
+}
 
-void play(uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves, int ts, bool verbose) {
+void free_instance(int handle) {
+    instances.erase(handle);
+}
+
+/// ENGINE ///
+
+void play(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves, int ts, bool verbose) {
     board::pos pos{lily, red, blue, turn, moves};
     engine::computer engine{pos};
-    auto result = engine.search(ts, &last_score, verbose);
-
-    last_move = result;
+    instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
 }
 
-int get_last_score() {
-    return last_score;
+int get_last_score(int handle) {
+    return instances[handle].last_score;
 }
 
-uint64_t get_last_move_start() {
-    return last_move.m_start;
+uint64_t get_last_move_start(int handle) {
+    return instances[handle].last_move.m_start;
 }
 
-uint64_t get_last_move_end() {
-    return last_move.m_end;
+uint64_t get_last_move_end(int handle) {
+    return instances[handle].last_move.m_end;
 }
 
-uint64_t get_last_move_grow() {
-    return last_move.m_grow;
+uint64_t get_last_move_grow(int handle) {
+    return instances[handle].last_move.m_grow;
 }
 
-board::pos last_pos;
-std::vector<board::move> last_moves;
+/// BOARD ///
 
-void pos_default() {
-    last_pos = board::pos{};
+void pos_default(int handle) {
+    instances[handle].last_pos = board::pos{};
 }
 
-void pos_load(uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves) {
-    last_pos = board::pos{lily, red, blue, turn, moves};
+void pos_load(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves) {
+    instances[handle].last_pos = board::pos{lily, red, blue, turn, moves};
 }
 
-void pos_display() {
-    std::cout << last_pos.display() << std::endl;
+void pos_display(int handle) {
+    std::cout << instances[handle].last_pos.display() << std::endl;
 }
 
-void pos_push(uint64_t grow, uint64_t start, uint64_t end) {
+void pos_push(int handle, uint64_t grow, uint64_t start, uint64_t end) {
     board::move m{grow, start, end};
-    last_pos.push(m);
+    instances[handle].last_pos.push(m);
 }
 
-void pos_pop(uint64_t grow, uint64_t start, uint64_t end) {
+void pos_pop(int handle, uint64_t grow, uint64_t start, uint64_t end) {
     board::move m{grow, start, end};
-    last_pos.pop(m);
+    instances[handle].last_pos.pop(m);
 }
 
-int pos_state() {
-    return last_pos.get_state();
+int pos_state(int handle) {
+    return instances[handle].last_pos.get_state();
 }
 
-uint64_t pos_lily() {
-    return last_pos.m_lilypads;
+uint64_t pos_lily(int handle) {
+    return instances[handle].last_pos.m_lilypads;
 }
 
-uint64_t pos_red() {
-    return last_pos.m_players[board::RED];
+uint64_t pos_red(int handle) {
+    return instances[handle].last_pos.m_players[board::RED];
 }
 
-uint64_t pos_blue() {
-    return last_pos.m_players[board::BLUE];
+uint64_t pos_blue(int handle) {
+    return instances[handle].last_pos.m_players[board::BLUE];
 }
 
-int pos_moves() {
-    return last_pos.m_moves;
+int pos_moves(int handle) {
+    return instances[handle].last_pos.m_moves;
 }
 
-int pos_turn() {
-    return last_pos.m_turn;
+int pos_turn(int handle) {
+    return instances[handle].last_pos.m_turn;
 }
 
-void pos_compute_moves() {
-    last_moves = last_pos.get_moves();
+void pos_compute_moves(int handle) {
+    instances[handle].last_moves = instances[handle].last_pos.get_moves();
 }
 
-int pos_moves_length() {
-    return last_moves.size();
+int pos_moves_length(int handle) {
+    return instances[handle].last_moves.size();
 }
 
-uint64_t pos_moves_start(int i) {
-    return last_moves[i].m_start;
+uint64_t pos_moves_start(int handle, int i) {
+    return instances[handle].last_moves[i].m_start;
 }
 
-uint64_t pos_moves_end(int i) {
-    return last_moves[i].m_end;
+uint64_t pos_moves_end(int handle, int i) {
+    return instances[handle].last_moves[i].m_end;
 }
 
-uint64_t pos_moves_grow(int i) {
-    return last_moves[i].m_grow;
+uint64_t pos_moves_grow(int handle, int i) {
+    return instances[handle].last_moves[i].m_grow;
 }
-
 
 
 }

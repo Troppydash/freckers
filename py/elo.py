@@ -1,0 +1,115 @@
+import json
+import random
+import multiprocessing
+
+import engine
+import agents
+from engine import Pos, Engine
+import matplotlib.pyplot as plt
+
+
+def playoff(engine1, engine2):
+    ts = 1000
+    engine1: Engine = engine1()
+    engine2: Engine = engine2()
+
+    pos = Pos()
+
+    # random moves
+    left = 10
+    while pos.state() == pos.NONE and left > 0:
+        moves = pos.get_moves()
+        pos.push(random.choice(moves))
+        left -= 1
+
+    scores = [0, 0]
+
+    def run(pos, engine1_turn):
+        while pos.state() == pos.NONE:
+            if pos.turn == engine1_turn:
+                m, _ = engine1.play(game=pos, ts=ts, verbose=False)
+            else:
+                m, _ = engine2.play(game=pos, ts=ts, verbose=False)
+
+            pos.push(m)
+
+        winner = pos.state()
+        if winner == engine1_turn:
+            scores[0] += 1
+        elif winner == 1 - engine1_turn:
+            scores[1] += 1
+        else:
+            scores[0] += 0.5
+            scores[1] += 0.5
+
+    run(pos.clone(), pos.turn)
+    run(pos.clone(), 1 - pos.turn)
+
+    return scores
+
+
+def play(x):
+    i, j, ai, aj = x
+    return (i, j, playoff(ai, aj))
+
+
+def round(agents, elos, names):
+    n = len(agents)
+    k = 40
+
+    with multiprocessing.Pool(4) as p:
+        matchups = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                matchups.append((i, j, agents[i], agents[j]))
+
+        results = p.map(play, matchups)
+
+    for i, j, scores in results:
+        # update result
+        probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
+        probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
+        elos[names[i]].append(elos[names[i]][-1] + k * (scores[0] / 2 - probi))
+        elos[names[j]].append(elos[names[j]][-1] + k * (scores[1] / 2 - probj))
+
+
+def save_elos(elos):
+    with open('elo.json', 'w') as f:
+        json.dump(elos, f)
+
+
+def load_elos(agents):
+    with open('elo.json', 'r') as f:
+        elos = json.load(f)
+
+    for agent in agents:
+        if agent not in elos:
+            elos[agent] = [1000]
+
+    save_elos(elos)
+    return elos
+
+
+def plot_elos(elos):
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+    for key, value in elos.items():
+        ax.plot(list(range(len(value))), value, label=key)
+    fig.legend()
+    fig.savefig("elos.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+if __name__ == '__main__':
+    agents = [agents.V0, agents.Latest]
+    names = ["v0", "latest"]
+    elos = load_elos(names)
+    plot_elos(elos)
+
+    i = 0
+    while True:
+        print(f"[info] round {i}")
+        round(agents, elos, names)
+        save_elos(elos)
+        plot_elos(elos)
+
+        i += 1
