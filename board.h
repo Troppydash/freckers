@@ -61,9 +61,8 @@ namespace board {
             mask no_right = ALL ^ (LINE << (COLS - 1));
 
             // left right, bottom left, bottom, bottom right, top right, top, top left
-            //??
             mask result = ((pos >> 1) & no_right) | ((pos << 1) & no_left) |
-                          ((pos << (ROWS - 1)) & no_right) | (pos << (ROWS)) | ((pos << (ROWS + 1)) & no_left) | ((pos >> (ROWS - 1)) & no_left) | (pos >> (ROWS)) | ((pos >> (ROWS + 1)) & no_right);
+                          ((pos << (COLS - 1)) & no_right) | (pos << (COLS)) | ((pos << (COLS + 1)) & no_left) | ((pos >> (COLS - 1)) & no_left) | (pos >> (COLS)) | ((pos >> (COLS + 1)) & no_right);
 
             return result;
         }
@@ -76,7 +75,7 @@ namespace board {
             mask no_right = ALL ^ (LINE << (COLS - 1));
             // left right, bottom left, bottom, bottom right
             mask result = ((pos >> 1) & no_right) | ((pos << 1) & no_left) |
-                          ((pos << (ROWS - 1)) & no_right) | (pos << (ROWS)) | ((pos << (ROWS + 1)) & no_left);
+                          ((pos << (COLS - 1)) & no_right) | (pos << (COLS)) | ((pos << (COLS + 1)) & no_left);
             return result;
         }
 
@@ -87,9 +86,9 @@ namespace board {
             // left right, bottom left, bottom, bottom right
             mask left = ((((pos >> 1) & no_right) & obst) >> 1) & no_right;
             mask right = ((((pos << 1) & no_left) & obst) << 1) & no_left;
-            mask bottom_left = ((((pos << (ROWS - 1)) & no_right) & obst) << (ROWS - 1)) & no_right;
-            mask bottom_right = ((((pos << (ROWS + 1)) & no_left) & obst) << (ROWS + 1)) & no_left;
-            mask bottom = ((((pos << ROWS)) & obst) << ROWS);
+            mask bottom_left = ((((pos << (COLS - 1)) & no_right) & obst) << (COLS - 1)) & no_right;
+            mask bottom_right = ((((pos << (COLS + 1)) & no_left) & obst) << (COLS + 1)) & no_left;
+            mask bottom = ((((pos << COLS)) & obst) << COLS);
             return left | right | bottom_left | bottom_right | bottom;
         }
 
@@ -98,9 +97,9 @@ namespace board {
             mask no_right = ALL ^ (LINE << (COLS - 1));
 
             // left right, bottom left, bottom, bottom right
-            mask bottom_left = ((((pos << (ROWS - 1)) & no_right) & obst) << (ROWS - 1)) & no_right;
-            mask bottom_right = ((((pos << (ROWS + 1)) & no_left) & obst) << (ROWS + 1)) & no_left;
-            mask bottom = ((((pos << ROWS)) & obst) << ROWS);
+            mask bottom_left = ((((pos << (COLS - 1)) & no_right) & obst) << (COLS - 1)) & no_right;
+            mask bottom_right = ((((pos << (COLS + 1)) & no_left) & obst) << (COLS + 1)) & no_left;
+            mask bottom = ((((pos << COLS)) & obst) << COLS);
             return bottom_left | bottom_right | bottom;
         }
 
@@ -109,7 +108,7 @@ namespace board {
             mask no_right = ALL ^ (LINE << (COLS - 1));
             // left right, top right, top, top left
             mask result = ((pos >> 1) & no_right) | ((pos << 1) & no_left) |
-                          ((pos >> (ROWS - 1)) & no_left) | (pos >> (ROWS)) | ((pos >> (ROWS + 1)) & no_right);
+                          ((pos >> (COLS - 1)) & no_left) | (pos >> (COLS)) | ((pos >> (COLS + 1)) & no_right);
             return result;
         }
 
@@ -120,9 +119,9 @@ namespace board {
             // left right, top right, top, top left
             mask left = ((((pos >> 1) & no_right) & obst) >> 1) & no_right;
             mask right = ((((pos << 1) & no_left) & obst) << 1) & no_left;
-            mask top_right = ((((pos >> (ROWS - 1)) & no_left) & obst) >> (ROWS - 1)) & no_left;
-            mask top_left = ((((pos >> (ROWS + 1)) & no_right) & obst) >> (ROWS + 1)) & no_right;
-            mask top = ((((pos >> ROWS)) & obst) >> ROWS);
+            mask top_right = ((((pos >> (COLS - 1)) & no_left) & obst) >> (COLS - 1)) & no_left;
+            mask top_left = ((((pos >> (COLS + 1)) & no_right) & obst) >> (COLS + 1)) & no_right;
+            mask top = ((((pos >> COLS)) & obst) >> COLS);
             return left | right | top_left | top_right | top;
         }
 
@@ -131,9 +130,9 @@ namespace board {
             mask no_right = ALL ^ (LINE << (COLS - 1));
 
             // left right, top right, top, top left
-            mask top_right = ((((pos >> (ROWS - 1)) & no_left) & obst) >> (ROWS - 1)) & no_left;
-            mask top_left = ((((pos >> (ROWS + 1)) & no_right) & obst) >> (ROWS + 1)) & no_right;
-            mask top = ((((pos >> ROWS)) & obst) >> ROWS);
+            mask top_right = ((((pos >> (COLS - 1)) & no_left) & obst) >> (COLS - 1)) & no_left;
+            mask top_left = ((((pos >> (COLS + 1)) & no_right) & obst) >> (COLS + 1)) & no_right;
+            mask top = ((((pos >> COLS)) & obst) >> COLS);
             return top_left | top_right | top;
         }
 
@@ -194,11 +193,12 @@ namespace board {
         bool is_grow() const {
             // Can't be a grow move if
             // the move is empty or
-            //??
+            //
+
             return !is_null() && m_grow != bitboard::ALL;
         }
 
-        // Return true if m_grow is "null"
+        // Return true if move is "null"
         bool is_null() const {
             return m_grow == bitboard::ALL - 1;
         }
@@ -210,7 +210,7 @@ namespace board {
             return {start, end};
         }
 
-
+        // A function to generate move from the starting position to the possible next position
         static void from_mask(mask pos, mask start, std::vector<move> &out) {
             while (pos > 0) {
                 // get piece mask
@@ -293,7 +293,7 @@ namespace board {
 
             // First turn is the red frog
             m_turn = RED;
-            //
+            // Move counter
             m_moves = 0;
         }
 
@@ -350,7 +350,7 @@ namespace board {
                 new_jumps = bitboard::jump_up_forward(m_players[m_turn], obst);
             }
 
-            // ?? This is fucking weird
+
             new_jumps &= m_lilypads & (~obst);
             return new_jumps > 0;
         }
@@ -536,8 +536,6 @@ namespace board {
                 // return the other team
                 return 1 - m_turn;
             }
-
-            // TODO: also account for more frogs on either side using popcount
 
             // If the other hasn't won yet
             // Check if the number of move exceed or equal to the draw move
