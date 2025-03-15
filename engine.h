@@ -5,13 +5,14 @@
 #ifndef FRECKER_ENGINE_H
 #define FRECKER_ENGINE_H
 
-#include <cinttypes>
-#include <vector>
-#include <tuple>
-#include <chrono>
-#include <iostream>
 #include "board.h"
+#include "nnue.h"
 #include "param.h"
+#include <chrono>
+#include <cinttypes>
+#include <iostream>
+#include <tuple>
+#include <vector>
 
 namespace engine {
     using namespace board;
@@ -129,9 +130,10 @@ namespace engine {
         int m_history[2][64][64];
         int m_lmr[50][100];
 
+        nnue::seq m_nnue;
 
-        explicit computer(pos pos)
-                : m_tt(64), m_pos(pos), m_searched(0), m_timer() {
+        explicit computer(pos pos, std::vector<std::string> weights)
+            : m_tt(64), m_pos(pos), m_searched(0), m_timer(), m_nnue(weights) {
             for (int i = 0; i < 3; ++i) {
                 for (int j = 0; j < 64; ++j) {
                     for (int k = 0; k < 64; ++k) {
@@ -147,117 +149,19 @@ namespace engine {
             }
         }
 
+        int nnue_evaluate() {
+            double score = m_nnue.compute();
+            if (m_pos.m_turn == board::BLUE) {
+                score = 1.0 - score;
+            }
+
+            score = std::min(0.9999, std::max(0.0001, score));
+            int move_tempo = 0;
+            return static_cast<int>(-400.0 * log(1.0 / score - 1.0)) + move_tempo;
+        }
+
         int evaluate() {
-            int v_scores[] = {0, 1, 2, 3, 5, 8, 13, 21};
-            int h_scores[] = {0, 0, 0, 0, 0, 0, 0, 0};
-            // compute distance heuristic
-            // shorter dist to end the better
-            int red_total = 0;
-            int blue_total = 0;
-
-            board::mask m = m_pos.m_players[board::RED];
-            while (m > 0) {
-                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                m ^= piece;
-
-                auto coord = bitboard::get_coord(piece);
-                red_total += v_scores[coord.first] + h_scores[coord.second];
-            }
-
-            m = m_pos.m_players[board::BLUE];
-            while (m > 0) {
-                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                m ^= piece;
-
-                auto coord = bitboard::get_coord(piece);
-                blue_total += v_scores[7 - coord.first] + h_scores[coord.second];
-            }
-
-            int distance_heuristic = 0;
-            if (m_pos.m_turn == board::RED) {
-                distance_heuristic = (red_total - blue_total) * 100;
-            } else {
-                distance_heuristic = (blue_total - red_total) * 100;
-            }
-
-
-            // lilypad piece heuristic
-            // the more lilypads and more our piece and fewer their piece, the better
-            //
-            // double red_lilypads = 0;
-            // double red_own_pieces = 0;
-            // double red_other_pieces = 0;
-            //
-            // double blue_lilypads = 0;
-            // double blue_own_pieces = 0;
-            // double blue_other_pieces = 0;
-            // m = m_pos.m_players[board::RED];
-            // while (m > 0) {
-            //     mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-            //     m ^= piece;
-            //
-            //     auto coord = bitboard::get_coord(piece);
-            //
-            //     mask lines = bitboard::LINE | (bitboard::LINE << 1) | (bitboard::LINE << 2);
-            //     mask left_filter = ~bitboard::LINE;
-            //     mask right_filter = ~(bitboard::LINE << (bitboard::COLS - 1));
-            //     mask filter = bitboard::ALL;
-            //     if (coord.second == 0) {
-            //         filter = right_filter;
-            //     } else if (coord.second == bitboard::COLS-1) {
-            //         filter = left_filter;
-            //     }
-            //     // no last row
-            //     // filter &= ~(bitboard::BOTTOM);
-            //
-            //     mask front = (lines << (bitboard::COLS * (coord.first+1) + (coord.second-1))) & filter;
-            //     int bits = __builtin_popcountll(front);
-            //     if (bits == 0)
-            //         continue;
-            //     red_lilypads += (double)__builtin_popcountll(m_pos.m_lilypads & front) / bits;
-            //     red_own_pieces += (double)__builtin_popcountll(m_pos.m_players[board::RED] & front) / bits;
-            //     red_other_pieces += (double)__builtin_popcountll(m_pos.m_players[board::BLUE] & front) / bits;
-            // }
-            //
-            // m = m_pos.m_players[board::BLUE];
-            // while (m > 0) {
-            //     mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-            //     m ^= piece;
-            //
-            //     auto coord = bitboard::get_coord(piece);
-            //
-            //     mask lines = bitboard::LINE | (bitboard::LINE << 1) | (bitboard::LINE << 2);
-            //     mask left_filter = ~bitboard::LINE;
-            //     mask right_filter = ~(bitboard::LINE << (bitboard::COLS - 1));
-            //     mask filter = bitboard::ALL;
-            //     if (coord.second == 0) {
-            //         filter = right_filter;
-            //     } else if (coord.second == bitboard::COLS-1) {
-            //         filter = left_filter;
-            //     }
-            //     // no last row
-            //     // filter &= ~(bitboard::TOP);
-            //
-            //     // TODO: shift this
-            //     mask front = (lines >> (bitboard::COLS * (bitboard::ROWS-coord.first) + (1-coord.second))) & filter;
-            //     int bits = __builtin_popcountll(front);
-            //     if (bits == 0)
-            //         continue;
-            //     blue_lilypads += (double)__builtin_popcountll(m_pos.m_lilypads & front) / bits;
-            //     blue_own_pieces += (double)__builtin_popcountll(m_pos.m_players[board::BLUE] & front) / bits;
-            //     blue_other_pieces += (double)__builtin_popcountll(m_pos.m_players[board::RED] & front) / bits;
-            // }
-
-            // average is 12 lilypads,
-            // average is 1 piece
-            // (red_lilypads - blue_lilypads) * 100.0 / 24.0
-            // double front_heuristic = - (red_own_pieces - blue_own_pieces) * 100.0 / 10.0 + (red_other_pieces - blue_other_pieces) * 100.0 / 10.0;
-            // if (m_pos.m_turn == board::BLUE) {
-            //     front_heuristic *= -1;
-            // }
-            // std::cout << front_heuristic << std::endl;
-
-            return distance_heuristic + 100;
+            return nnue_evaluate();
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move) {
@@ -341,6 +245,54 @@ namespace engine {
             }
         }
 
+        void push_nnue(move &move) {
+            if (move.is_null()) {
+                return;
+            }
+            if (move.is_grow()) {
+                board::mask m = move.m_grow;
+                while (m > 0) {
+                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+                    mask piece = 1ull << index;
+                    m ^= piece;
+
+                    m_nnue.push(index);
+                }
+            } else if (m_pos.m_turn == board::RED) {
+                m_nnue.pop(__builtin_ctzll(move.m_start));
+                m_nnue.pop(8 * 8 + __builtin_ctzll(move.m_start));
+                m_nnue.push(8 * 8 + __builtin_ctzll(move.m_end));
+            } else {
+                m_nnue.pop(__builtin_ctzll(move.m_start));
+                m_nnue.pop(8 * 8 * 2 + __builtin_ctzll(move.m_start));
+                m_nnue.push(8 * 8 * 2 + __builtin_ctzll(move.m_end));
+            }
+        }
+
+        void pop_nnue(move &move) {
+            if (move.is_null()) {
+                return;
+            }
+            if (move.is_grow()) {
+                board::mask m = move.m_grow;
+                while (m > 0) {
+                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+                    mask piece = 1ull << index;
+                    m ^= piece;
+
+                    m_nnue.pop(index);
+                }
+            } else if (m_pos.m_turn == board::RED) {
+                m_nnue.push(__builtin_ctzll(move.m_start));
+                m_nnue.push(8 * 8 + __builtin_ctzll(move.m_start));
+                m_nnue.pop(8 * 8 + __builtin_ctzll(move.m_end));
+            } else {
+                m_nnue.push(__builtin_ctzll(move.m_start));
+                m_nnue.push(8 * 8 * 2 + __builtin_ctzll(move.m_start));
+                m_nnue.pop(8 * 8 * 2 + __builtin_ctzll(move.m_end));
+            }
+        }
+
         int qsearch(int max_ply, int ply, int alpha, int beta, std::vector<move> &pv_line) {
             m_searched += 1;
 
@@ -387,11 +339,13 @@ namespace engine {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
+                push_nnue(move);
                 m_pos.push(move);
 
                 int score = -qsearch(max_ply, ply + 1, -beta, -alpha, child_pv_line);
 
                 m_pos.pop(move);
+                pop_nnue(move);
 
                 if (score > best_score) {
                     best_score = score;
@@ -458,23 +412,23 @@ namespace engine {
 
 
             // null move pruning
-//            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
-//                move null = move::null();
-//                m_pos.push(null);
-//
-//                int r = 4;
-//                std::vector<move> child_pv_line;
-//                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
-//                m_pos.pop(null);
-//
-//                if (m_timer.m_is_stopped) {
-//                    return 0;
-//                }
-//
-//                if (score >= beta) {
-//                    return beta;
-//                }
-//            }
+            //            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
+            //                move null = move::null();
+            //                m_pos.push(null);
+            //
+            //                int r = 4;
+            //                std::vector<move> child_pv_line;
+            //                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+            //                m_pos.pop(null);
+            //
+            //                if (m_timer.m_is_stopped) {
+            //                    return 0;
+            //                }
+            //
+            //                if (score >= beta) {
+            //                    return beta;
+            //                }
+            //            }
 
 
             std::vector<move> child_pv_line;
@@ -486,6 +440,7 @@ namespace engine {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
+                push_nnue(move);
                 m_pos.push(move);
 
                 int explored_moves = i + 1;
@@ -512,6 +467,7 @@ namespace engine {
                     }
                 }
                 m_pos.pop(move);
+                pop_nnue(move);
 
                 if (score > best_score) {
                     best_score = score;
@@ -563,6 +519,21 @@ namespace engine {
             return std::to_string((double) score / 100);
         }
 
+        std::vector<int> pos_init() {
+            std::vector<int> out;
+            for (auto mask: {m_pos.m_lilypads, m_pos.m_players[0], m_pos.m_players[1]}) {
+                for (int i = 0; i < 64; ++i) {
+                    if (mask & (1ull << i)) {
+                        out.push_back(1);
+                    } else {
+                        out.push_back(0);
+                    }
+                }
+            }
+
+            return out;
+        }
+
         move search(int ts, int *new_score, bool verbose) {
             move best_move = move::null();
             int alpha = -param::inf;
@@ -572,9 +543,11 @@ namespace engine {
 
             m_timer.start(ts);
 
-
             std::chrono::milliseconds last = m_timer.now();
             int last_searched = m_searched;
+
+            auto init = pos_init();
+            m_nnue.init(init);
 
             while (depth <= param::max_depth) {
                 pv_line.clear();
@@ -634,7 +607,7 @@ namespace engine {
             return best_move;
         }
     };
-}
+}// namespace engine
 
 
-#endif //FRECKER_ENGINE_H
+#endif//FRECKER_ENGINE_H

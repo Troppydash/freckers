@@ -16,7 +16,7 @@ def playoff(engine1, engine2):
     pos = Pos()
 
     # random moves
-    left = 10
+    left = 8
     while pos.state() == pos.NONE and left > 0:
         moves = pos.get_moves()
         pos.push(random.choice(moves))
@@ -82,9 +82,13 @@ def load_elos(agents):
     with open('elo.json', 'r') as f:
         elos = json.load(f)
 
+    best = 1
+    for key in elos:
+        best = max(best, len(elos[key]))
+
     for agent in agents:
         if agent not in elos:
-            elos[agent] = [1000]
+            elos[agent] = [1000] * best
 
     save_elos(elos)
     return elos
@@ -100,8 +104,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V0, agents.Latest]
-    names = ["v0", "latest"]
+    agents = [agents.V0, agents.V1, agents.Latest]
+    names = ["v0", "v1", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 

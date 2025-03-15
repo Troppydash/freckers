@@ -67,6 +67,10 @@ class Pos:
     def turn(self):
         return self.cpp.pos_turn(self.handle)
 
+    @property
+    def has_jumps(self):
+        return self.cpp.pos_has_jumps(self.handle)
+
     def push(self, move: Move):
         self.cpp.pos_push(self.handle, ctypes.c_ulonglong(move.grow), ctypes.c_ulonglong(move.start), ctypes.c_ulonglong(move.end))
 
