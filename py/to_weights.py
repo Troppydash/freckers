@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-base = './models/session0/'
-file = f"{base}model_80.pt"
+base = './models/session1/'
+file = f"{base}model_170.pt"
 model = torch.load(file)
 
 parameters = {}
@@ -39,5 +39,6 @@ for k, parameter in parameters.items():
         else:
             out_str.append(f"{i:.15f}")
 
+    print('written to ' + f'{base}weight_{k}.txt')
     with open(f'{base}weight_{k}.txt', 'w') as f:
         f.write(' '.join(out_str))

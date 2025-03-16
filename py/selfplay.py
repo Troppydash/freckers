@@ -63,9 +63,9 @@ class Session:
 
             i = 0
             while pos.state() == Pos.NONE:
-                eps = 0.85 ** i
+                eps = max(0.03, 0.85 ** i)
 
-                positions.append((pos.lily_pad, pos.red, pos.blue, pos.turn))
+                positions.append((pos.lily_pad, pos.red, pos.blue, pos.turn, pos.moves))
                 if pos.has_jumps:
                     flags.append(1)
                 else:
@@ -106,6 +106,8 @@ class Session:
             p.map(self.against, playoffs)
 
 class Session0(Session):
+    # ts = 100
+    # 0.85
     def past_agents(self):
         return [agents.Random, agents.V0, agents.V0, agents.V0, agents.V0], ["random", "v0(0)", "v0(1)", "v0(2)", "v0(3)"]
 
@@ -113,6 +115,16 @@ class Session0(Session):
         return agents.V0, "v0(current)"
 
 
+class Session1(Session):
+    # ts = 1000
+    # 0.85
+    def past_agents(self):
+        return [agents.Random, agents.V0, agents.V1, agents.V1, agents.V1], ["random", "v0(0)", "v1(0)", "v1(1)", "v1(2)"]
+
+    def current_agent(self):
+        return agents.V1, "v1(current)"
+
+
 if __name__ == '__main__':
-    session = Session0("session0")
+    session = Session1("session1")
     session.generate()

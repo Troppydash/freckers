@@ -26,7 +26,7 @@ import pickle
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 3
-session = "session0"
+session = "session1"
 
 def bitmask_to_array(mask: int):
     arr = []
@@ -47,7 +47,7 @@ class FreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not os.path.basename(file).startswith(session):
+            if not os.path.basename(file).startswith("session"):
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
@@ -56,6 +56,7 @@ class FreckersDataset(Dataset):
                 dataset = pickle.load(f)
 
             for i in range(len(dataset.positions)):
+                # modes = dataset.positions[i][4]
                 X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
 
                 outcome = dataset.outcomes[i]
@@ -65,10 +66,13 @@ class FreckersDataset(Dataset):
                 elif outcome == 1:
                     score = 0
 
+                # scaler = 0.97 ** max(0, 60 - modes)
+                # norm = (score - 0.5) * 2 * scaler
+                # y.append([(norm + 1) / 2])
                 y.append([score])
 
-        self.X = torch.tensor(X, dtype=torch.float16).reshape(-1, input_size)
-        self.y = torch.tensor(y, dtype=torch.float16)
+        self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
+        self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
         return len(self.y)
@@ -80,10 +84,10 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(input_size, 64, dtype=torch.float16)
-        self.layer2 = nn.Linear(64, 32, dtype=torch.float16)
-        self.layer3 = nn.Linear(32, 16, dtype=torch.float16)
-        self.layer4 = nn.Linear(16, 1, dtype=torch.float16)
+        self.layer1 = nn.Linear(input_size, 32, dtype=torch.float32)
+        self.layer2 = nn.Linear(32, 16, dtype=torch.float32)
+        self.layer3 = nn.Linear(16, 8, dtype=torch.float32)
+        self.layer4 = nn.Linear(8, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -99,7 +103,7 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    # optimizer = optim.Adam(net.parameters(), lr=0.005, eps=1e-8)
+    # optimizer = optim.Adam(net.parameters(), lr=0.0002, eps=1e-8)
     optimizer = optim.SGD(
         net.parameters(), lr=config["lr"], momentum=config["momentum"]
     )
@@ -177,7 +181,7 @@ def train(config):
 if __name__ == '__main__':
     train(
         {
-            "lr": 0.01,
+            "lr": 0.0005,
             "batch_size": 4096,
             "test_batch": 8096 * 2,
             "momentum": 0.9,

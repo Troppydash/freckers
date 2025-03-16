@@ -14,7 +14,7 @@
 #include <unordered_map>
 
 namespace nnue {
-    int32_t INT16_SCALE = INT16_MAX;
+    int32_t INT16_SCALE = (1<<15) - 1;
 
     class layer {
     public:

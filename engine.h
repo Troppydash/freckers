@@ -134,10 +134,10 @@ namespace engine {
 
         explicit computer(pos pos, std::vector<std::string> weights)
             : m_tt(64), m_pos(pos), m_searched(0), m_timer(), m_nnue(weights) {
-            for (int i = 0; i < 3; ++i) {
-                for (int j = 0; j < 64; ++j) {
-                    for (int k = 0; k < 64; ++k) {
-                        m_history[i][j][k] = 0;
+            for (auto & i : m_history) {
+                for (auto & j : i) {
+                    for (int & k : j) {
+                        k = 0;
                     }
                 }
             }
@@ -155,12 +155,53 @@ namespace engine {
                 score = 1.0 - score;
             }
 
+            return static_cast<int>((score - 0.5) * 2.0 * 40.0 * 100.0);
             score = std::min(0.9999, std::max(0.0001, score));
             int move_tempo = 0;
             return static_cast<int>(-400.0 * log(1.0 / score - 1.0)) + move_tempo;
         }
 
+        int classical_evaluate() {
+            int v_scores[] = {0, 1, 2, 3, 5, 8, 13, 21};
+            int h_scores[] = {0, 0, 0, 0, 0, 0, 0, 0};
+            // compute distance heuristic
+            // shorter dist to end the better
+            int red_total = 0;
+            int blue_total = 0;
+
+            board::mask m = m_pos.m_players[board::RED];
+            while (m > 0) {
+                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+                m ^= piece;
+
+                auto coord = bitboard::get_coord(piece);
+                red_total += v_scores[coord.first] + h_scores[coord.second];
+            }
+
+            m = m_pos.m_players[board::BLUE];
+            while (m > 0) {
+                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+                m ^= piece;
+
+                auto coord = bitboard::get_coord(piece);
+                blue_total += v_scores[7 - coord.first] + h_scores[coord.second];
+            }
+
+            int distance_heuristic = 0;
+            if (m_pos.m_turn == board::RED) {
+                distance_heuristic = (red_total - blue_total) * 100;
+            } else {
+                distance_heuristic = (blue_total - red_total) * 100;
+            }
+
+            return distance_heuristic + 100;
+        }
+
         int evaluate() {
+//            int classical = classical_evaluate();
+//            if (abs(classical) > 20*100) {
+//                return classical;
+//            }
             return nnue_evaluate();
         }
 

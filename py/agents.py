@@ -21,6 +21,7 @@ class V0(Engine):
     def __init__(self):
         super().__init__(load_dll("v0.so"))
 
+
 class V1(Engine):
     def __init__(self):
         super().__init__(load_dll('v1/libfrecker.so'))
@@ -29,6 +30,16 @@ class V1(Engine):
         weights = os.path.join(dirname, './binaries/v1/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+
+class V2(Engine):
+    def __init__(self):
+        super().__init__(load_dll('v2/libfrecker.so'))
+
+        dirname = os.path.dirname(__file__)
+        weights = os.path.join(dirname, './binaries/v2/')
+        self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
+
 class Latest(Engine):
     def __init__(self):
         super().__init__(load_dll("../../cmake-build-release/libfrecker.so"))
@@ -36,4 +47,3 @@ class Latest(Engine):
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, '../')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
-
