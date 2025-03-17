@@ -26,7 +26,7 @@ import pickle
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 3
-session = "session1"
+session = "session2"
 
 def bitmask_to_array(mask: int):
     arr = []
@@ -47,7 +47,7 @@ class FreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not os.path.basename(file).startswith("session"):
+            if not os.path.basename(file).startswith(session):
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
@@ -84,10 +84,10 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(input_size, 32, dtype=torch.float32)
-        self.layer2 = nn.Linear(32, 16, dtype=torch.float32)
-        self.layer3 = nn.Linear(16, 8, dtype=torch.float32)
-        self.layer4 = nn.Linear(8, 1, dtype=torch.float32)
+        self.layer1 = nn.Linear(input_size, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
+        self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -181,9 +181,9 @@ def train(config):
 if __name__ == '__main__':
     train(
         {
-            "lr": 0.0005,
-            "batch_size": 4096,
-            "test_batch": 8096 * 2,
+            "lr": 0.0002,
+            "batch_size": 4096 * 4,
+            "test_batch": 4096 * 8,
             "momentum": 0.9,
         }
     )

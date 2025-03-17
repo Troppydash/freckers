@@ -16,7 +16,7 @@ def playoff(engine1, engine2):
     pos = Pos()
 
     # random moves
-    left = 8
+    left = 5
     while pos.state() == pos.NONE and left > 0:
         moves = pos.get_moves()
         pos.push(random.choice(moves))
@@ -57,7 +57,7 @@ def round(agents, elos, names):
     n = len(agents)
     k = 40
 
-    with multiprocessing.Pool(4) as p:
+    with multiprocessing.Pool(10) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -98,14 +98,16 @@ def plot_elos(elos):
     fig, ax = plt.subplots(nrows=1, ncols=1)
     for key, value in elos.items():
         ax.plot(list(range(len(value))), value, label=key)
+
+    ax.set_xlim([len(elos[key]) - 100, len(elos[key])])
     fig.legend()
     fig.savefig("elos.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    agents = [agents.V0, agents.V1, agents.Latest]
-    names = ["v0", "v1", "latest"]
+    agents = [agents.V0, agents.V1, agents.V2, agents.Latest]
+    names = ["v0", "v1", "v2", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 

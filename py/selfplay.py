@@ -41,7 +41,7 @@ class Session:
         pass
 
     def against(self, x):
-        ts = 1000
+        ts = 150
 
         past, n, current, name = x
 
@@ -125,6 +125,17 @@ class Session1(Session):
         return agents.V1, "v1(current)"
 
 
+class Session2(Session):
+    # ts = 150
+    # 0.85
+    def past_agents(self):
+        return [agents.Random, agents.V0, agents.V1, agents.V2, agents.V2, agents.V2], ["random", "v0(0)", "v1(0)", "v2(0)", "v2(1)", "v2(2)"]
+
+    def current_agent(self):
+        return agents.V2, "v2(current)"
+
+
+
 if __name__ == '__main__':
-    session = Session1("session1")
+    session = Session2("session2")
     session.generate()
