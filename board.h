@@ -211,6 +211,12 @@ namespace board {
             return {start, end};
         }
 
+        bool is_jump() const {
+            auto [start_r, start_c] = bitboard::get_coord(m_start);
+            auto [end_r, end_c] = bitboard::get_coord(m_end);
+            return abs(start_r - end_r) >= 2 || abs(start_c - end_c) >= 2;
+        }
+
         // A function to generate move from the starting position to the possible next position
         static void from_mask(mask pos, mask start, std::vector<move> &out) {
             while (pos > 0) {

@@ -130,17 +130,22 @@ namespace engine {
 
         int m_history[2][64][64];
         int m_lmr[50][100];
+        move m_killers[100];
 
         nnue::seq m_nnue;
 
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(64), m_pos(pos), m_searched(0), m_timer(), m_nnue(weights) {
+            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_nnue(weights) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
                         k = 0;
                     }
                 }
+            }
+
+            for (auto &m: m_killers) {
+                m = move::null();
             }
 
             for (int depth = 0; depth < 50; ++depth) {
@@ -198,7 +203,7 @@ namespace engine {
             return nnue_evaluate();
         }
 
-        std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move) {
+        std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply) {
             std::vector<std::pair<int, int>> scores;
             for (int i = 0; i < moves.size(); ++i) {
                 int score = 0;
@@ -206,6 +211,8 @@ namespace engine {
 
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
+                } else if (move == m_killers[ply]) {
+                    score += param::base_score + param::killer_move_score;
                 } else if (!move.is_grow()) {
                     // end game rankings
                     auto start = bitboard::get_coord(move.m_start);
@@ -284,6 +291,11 @@ namespace engine {
             }
         }
 
+        void store_killer(int ply, const move &killer) {
+            if (!killer.is_jump()) {
+                m_killers[ply] = killer;
+            }
+        }
 
         void push_nnue(move &move) {
             if (move.is_null()) {
@@ -395,7 +407,7 @@ namespace engine {
             }
 
             auto null = move::null();
-            auto scored_moves = score_moves(moves, null);
+            auto scored_moves = score_moves(moves, null, max_ply);
 
             std::vector<move> child_pv_line;
 
@@ -472,27 +484,27 @@ namespace engine {
             }
 
             auto moves = m_pos.get_moves();
-            auto scored_moves = score_moves(moves, tt_move);
+            auto scored_moves = score_moves(moves, tt_move, ply);
 
 
             // null move pruning
-            //            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
-            //                move null = move::null();
-            //                m_pos.push(null);
-            //
-            //                int r = 4;
-            //                std::vector<move> child_pv_line;
-            //                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
-            //                m_pos.pop(null);
-            //
-            //                if (m_timer.m_is_stopped) {
-            //                    return 0;
-            //                }
-            //
-            //                if (score >= beta) {
-            //                    return beta;
-            //                }
-            //            }
+            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
+                move null = move::null();
+                m_pos.push(null);
+
+                int r = 2;
+                std::vector<move> child_pv_line;
+                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+                m_pos.pop(null);
+
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
+
+                if (score >= beta) {
+                    return beta;
+                }
+            }
 
 
             std::vector<move> child_pv_line;
@@ -541,6 +553,7 @@ namespace engine {
                 if (score >= beta) {
                     tt_flag = param::beta_flag;
                     incr_history(move, depth);
+                    store_killer(ply, move);
                     break;
                 } else {
                     decr_history(move);

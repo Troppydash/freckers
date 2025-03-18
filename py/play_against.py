@@ -43,4 +43,4 @@ def play_against(player_turn, agent_class, ts):
 
 
 if __name__ == '__main__':
-    play_against(engine.Pos.RED, agents.V3, 1000)
+    play_against(engine.Pos.RED, agents.Latest, 2000)

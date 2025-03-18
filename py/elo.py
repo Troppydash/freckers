@@ -18,7 +18,7 @@ def playoff(engine1, engine2):
     # random moves
     left = 8
     while pos.state() == pos.NONE and left > 0:
-        if random.random() < 0.5:
+        if random.random() < 0.9:
             m, _ = engine1.play(game=pos, ts=ts, verbose=False)
             pos.push(m)
         else:
@@ -111,8 +111,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V1, agents.V2, agents.V3, agents.Latest]
-    names = ["v1", "v2", "v3", "latest"]
+    agents = [agents.V1, agents.V2, agents.V3, agents.V31, agents.Latest]
+    names = ["v1", "v2", "v3", "v31", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 
