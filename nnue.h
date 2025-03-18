@@ -91,11 +91,9 @@ namespace nnue {
         layer m_blue_accum;
         std::vector<layer> m_layers;
 
-        std::vector<int> m_temp;
-
 
         explicit seq(std::vector<std::string> &weights)
-            : m_red_accum{weights[0]}, m_blue_accum{weights[0]}, m_temp(64*64*2, 0) {
+            : m_red_accum{weights[0]}, m_blue_accum{weights[0]} {
             m_red_accum.m_accum = true;
             m_blue_accum.m_accum = true;
 
@@ -127,8 +125,6 @@ namespace nnue {
                 for (const int32_t &i: m_red_accum.m_output) {
                     output.push_back(std::max(0, std::min(i, INT16_SCALE)));
                 }
-
-
             } else {
                 for (const int32_t &i: m_red_accum.m_output) {
                     output.push_back(std::max(0, std::min(i, INT16_SCALE)));
@@ -149,26 +145,18 @@ namespace nnue {
 
         void push_red(int idx) {
             m_red_accum.update_add(idx);
-//            if (m_temp[idx] == 1) {
-//                printf("uh oh");
-//            }
-//            m_temp[idx] += 1;
         }
 
         void pop_red(int idx) {
             m_red_accum.update_sub(idx);
-//            if (m_temp[idx] == 0) {
-//                printf("uh oh");
-//            }
-//            m_temp[idx] -= 1;
         }
 
         void push_blue(int idx) {
-            m_blue_accum.update_add(64 * 64 - idx - 1);
+            m_blue_accum.update_add(idx);
         }
 
         void pop_blue(int idx) {
-            m_blue_accum.update_sub(64 * 64 - idx - 1);
+            m_blue_accum.update_sub(idx);
         }
     };
 }// namespace nnue

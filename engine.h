@@ -145,7 +145,7 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 3) + move * 1;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 1;
                 }
             }
         }
@@ -195,11 +195,6 @@ namespace engine {
         }
 
         int evaluate() {
-//            int classical = classical_evaluate();
-//            return classical;
-//            if (abs(classical) > 20 * 100) {
-//                return classical;
-//            }
             return nnue_evaluate();
         }
 
@@ -236,12 +231,12 @@ namespace engine {
                         score += history;
                     }
                 } else {
-//                    int count = __builtin_popcountll(move.m_grow);
-//                    if (count <= 0) {
-//                        score -= 10;
-//                    } else {
-                        score += __builtin_popcountll(move.m_grow) * 100;
-//                    }
+                    int count = __builtin_popcountll(move.m_grow);
+                    if (count <= 1) {
+                        score -= 10;
+                    } else {
+                        score += count * 10;
+                    }
                 }
 
                 scores.push_back({score, i});
@@ -289,52 +284,12 @@ namespace engine {
             }
         }
 
-        void push_leaf(int index, board::mask p1, board::mask p2) {
-            // update red
-            board::mask player = p1;
-            while (player > 0) {
-                int i = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(player) - 1);
-                player ^= 1ull << i;
-
-                m_nnue.push_red(index * 64 + i);
-            }
-
-            // update blue
-            player = p2;
-            while (player > 0) {
-                int i = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(player) - 1);
-                player ^= 1ull << i;
-
-                m_nnue.push_blue(index * 64 + i);
-            }
-        }
-
-        void pop_leaf(int index, board::mask p1, board::mask p2) {
-            // update red
-            board::mask player = p1;
-            while (player > 0) {
-                int i = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(player) - 1);
-                player ^= 1ull << i;
-
-                m_nnue.pop_red(index * 64 + i);
-            }
-
-            // update blue
-            player = p2;
-            while (player > 0) {
-                int i = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(player) - 1);
-                player ^= 1ull << i;
-
-                m_nnue.pop_blue(index * 64 + i);
-            }
-        }
 
         void push_nnue(move &move) {
             if (move.is_null()) {
                 return;
             }
 
-            // remember that nnue[leaf][player]
             if (move.is_grow()) {
                 board::mask m = move.m_grow;
                 while (m > 0) {
@@ -342,44 +297,27 @@ namespace engine {
                     mask piece = 1ull << index;
                     m ^= piece;
 
-                    push_leaf(index, m_pos.m_players[0], m_pos.m_players[1]);
+                    m_nnue.push_red(index);
+                    m_nnue.push_blue(63 - index);
                 }
             } else if (m_pos.m_turn == board::RED) {
                 int i = __builtin_ctzll(move.m_start);
                 int j = __builtin_ctzll(move.m_end);
 
-                board::mask m = m_pos.m_lilypads;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
+                m_nnue.push_red(64 + j);
+                m_nnue.pop_red(64 + i);
 
-                    if (index == i)
-                        continue;
-
-                    m_nnue.pop_red(64 * index + i);
-                    m_nnue.push_red(64 * index + j);
-                }
-
-                pop_leaf(i, m_pos.m_players[0], m_pos.m_players[1]);
+                m_nnue.pop_red(i);
+                m_nnue.pop_blue(63 - i);
             } else {
                 int i = __builtin_ctzll(move.m_start);
                 int j = __builtin_ctzll(move.m_end);
 
-                board::mask m = m_pos.m_lilypads;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
+                m_nnue.push_blue(64 + 63 - j);
+                m_nnue.pop_blue(64 + 63 - i);
 
-                    if (index == i)
-                        continue;
-
-                    m_nnue.pop_blue(64 * index + i);
-                    m_nnue.push_blue(64 * index + j);
-                }
-
-                pop_leaf(i, m_pos.m_players[0], m_pos.m_players[1]);
+                m_nnue.pop_red(i);
+                m_nnue.pop_blue(63 - i);
             }
         }
 
@@ -389,56 +327,39 @@ namespace engine {
             }
 
             if (move.is_grow()) {
+
                 board::mask m = move.m_grow;
                 while (m > 0) {
                     int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    m ^= 1ull << index;
+                    mask piece = 1ull << index;
+                    m ^= piece;
 
-                    // update grow
-                    pop_leaf(index, m_pos.m_players[0], m_pos.m_players[1]);
+                    m_nnue.pop_red(index);
+                    m_nnue.pop_blue(63 - index);
                 }
             } else if (m_pos.m_turn == board::RED) {
                 int i = __builtin_ctzll(move.m_start);
                 int j = __builtin_ctzll(move.m_end);
 
-                board::mask m = m_pos.m_lilypads;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
+                m_nnue.pop_red(64 + j);
+                m_nnue.push_red(64 + i);
 
-                    if (index == i)
-                        continue;
-
-                    m_nnue.push_red(64 * index + i);
-                    m_nnue.pop_red(64 * index + j);
-                }
-
-                push_leaf(i, m_pos.m_players[0], m_pos.m_players[1]);
+                m_nnue.push_red(i);
+                m_nnue.push_blue(63 - i);
             } else {
                 int i = __builtin_ctzll(move.m_start);
                 int j = __builtin_ctzll(move.m_end);
 
-                board::mask m = m_pos.m_lilypads;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
+                m_nnue.pop_blue(64 + 63 - j);
+                m_nnue.push_blue(64 + 63 - i);
 
-                    if (index == i)
-                        continue;
-
-                    m_nnue.push_blue(64 * index + i);
-                    m_nnue.pop_blue(64 * index + j);
-                }
-
-                push_leaf(i, m_pos.m_players[0], m_pos.m_players[1]);
+                m_nnue.push_red(i);
+                m_nnue.push_blue(63 - i);
             }
         }
 
         int qsearch(int max_ply, int ply, int alpha, int beta, std::vector<move> &pv_line) {
             m_searched += 1;
-//                        return evaluate();
 
             if (m_searched % 2048 == 0) {
                 m_timer.check();
@@ -461,19 +382,18 @@ namespace engine {
                 return evaluate();
             }
 
-            //            bool critical = m_pos.has_jumps();
-            //            int best_score = evaluate();
-            //
-            //            if (!critical && best_score >= beta) {
-            //                return best_score;
-            //            }
-            //
-            //            if (best_score > alpha) {
-            //                alpha = best_score;
-            //            }
+            std::vector<move> moves = m_pos.get_jump_moves();
+            bool critical = !moves.empty();
             int best_score = evaluate();
 
-            std::vector<move> moves = m_pos.get_jump_moves();
+            if (!critical && best_score >= beta) {
+                return best_score;
+            }
+
+            if (best_score > alpha) {
+                alpha = best_score;
+            }
+
             auto null = move::null();
             auto scored_moves = score_moves(moves, null);
 
@@ -482,7 +402,6 @@ namespace engine {
             for (int i = 0; i < moves.size(); ++i) {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
-
 
                 push_nnue(move);
                 m_pos.push(move);
@@ -594,7 +513,7 @@ namespace engine {
                     score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
                 } else {
                     int reduction = 0;
-                    if (!is_pv_node && explored_moves >= 3 && depth >= 3) {
+                    if (!is_pv_node && m_pos.get_jump_moves().empty() && explored_moves >= 3 && depth >= 3) {
                         reduction = m_lmr[depth][explored_moves];
                     }
 
@@ -667,26 +586,38 @@ namespace engine {
         std::pair<std::vector<int>, std::vector<int>> pos_init() {
             std::vector<int> red;
             for (int i = 0; i < 64; ++i) {
-                for (int j = 0; j < 64; ++j) {
-                    if ((m_pos.m_lilypads & (1ull << i)) && (m_pos.m_players[0] & (1ull << j))) {
-                        red.push_back(1);
-                    } else {
-                        red.push_back(0);
-                    }
-                }
-            }
-            std::vector<int> blue;
-            for (int i = 0; i < 64; ++i) {
-                for (int j = 0; j < 64; ++j) {
-                    if ((m_pos.m_lilypads & (1ull << i)) && (m_pos.m_players[1] & (1ull << j))) {
-                        blue.push_back(1);
-                    } else {
-                        blue.push_back(0);
-                    }
+                if (m_pos.m_lilypads & (1ull << i)) {
+                    red.push_back(1);
+                } else {
+                    red.push_back(0);
                 }
             }
 
-            std::reverse(blue.begin(), blue.end());
+            for (int i = 0; i < 64; ++i) {
+                if (m_pos.m_players[0] & (1ull << i)) {
+                    red.push_back(1);
+                } else {
+                    red.push_back(0);
+                }
+            }
+
+            std::vector<int> blue;
+            for (int i = 0; i < 64; ++i) {
+                if (m_pos.m_lilypads & (1ull << (63 - i))) {
+                    blue.push_back(1);
+                } else {
+                    blue.push_back(0);
+                }
+            }
+
+            for (int i = 0; i < 64; ++i) {
+                if (m_pos.m_players[1] & (1ull << (63 - i))) {
+                    blue.push_back(1);
+                } else {
+                    blue.push_back(0);
+                }
+            }
+
             return {red, blue};
         }
 

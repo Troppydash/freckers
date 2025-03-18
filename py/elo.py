@@ -16,10 +16,14 @@ def playoff(engine1, engine2):
     pos = Pos()
 
     # random moves
-    left = 10
+    left = 8
     while pos.state() == pos.NONE and left > 0:
-        moves = pos.get_moves()
-        pos.push(random.choice(moves))
+        if random.random() < 0.5:
+            m, _ = engine1.play(game=pos, ts=ts, verbose=False)
+            pos.push(m)
+        else:
+            moves = pos.get_moves()
+            pos.push(random.choice(moves))
         left -= 1
 
     scores = [0, 0]
@@ -101,13 +105,14 @@ def plot_elos(elos):
 
     ax.set_xlim([len(elos[key]) - 100, len(elos[key])])
     fig.legend()
+    ax.grid()
     fig.savefig("elos.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    agents = [agents.V0, agents.V1, agents.V2, agents.Latest]
-    names = ["v0", "v1", "v2", "latest"]
+    agents = [agents.V1, agents.V2, agents.V3, agents.Latest]
+    names = ["v1", "v2", "v3", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 

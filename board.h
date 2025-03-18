@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "colors.h"
 
 namespace board {
     using mask = uint64_t;
@@ -341,6 +342,7 @@ namespace board {
         }
 
         bool has_jumps() const {
+            return !get_jump_moves().empty();
             // TODO: fix this so that it detects any series of forward jumps not just immediate
             mask new_jumps = 0;
             // Get all the frogs on the board
@@ -407,11 +409,11 @@ namespace board {
 
                 all_jumps ^= piece;
                 all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
-//                if (m_turn == board::RED) {
-//                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
-//                } else {
-//                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
-//                }
+                if (m_turn == board::RED) {
+                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
+                } else {
+                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
+                }
                 move::from_mask(all_jumps, piece, moves);
             }
 
@@ -575,11 +577,11 @@ namespace board {
                     int i = row * bitboard::COLS + col;
                     mask mask = 1ull << i;
                     if (m_players[RED] & mask) {
-                        out += "R";
+                        out += FRED("R");
                     } else if (m_players[BLUE] & mask) {
-                        out += "B";
+                        out += FBLU("B");
                     } else if (m_lilypads & mask) {
-                        out += "_";
+                        out += FGRN("_");
                     } else {
                         out += ".";
                     }

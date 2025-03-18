@@ -13,7 +13,8 @@ add_library(frecker SHARED
         main.cpp
         board.h
         param.h
-        engine.h)
+        engine.h
+        colors.h)
 
 # https://gist.github.com/jlgerber/eafc4ee2b9954e27dd2bb009496b1b03
 #add_executable(frecker main.cpp

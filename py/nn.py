@@ -15,7 +15,7 @@ import pickle
 import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-input_size = 8 * 8 * 3
+input_size = 8 * 8 * 4
 session = "session2"
 
 def bitmask_to_array(mask: int):
@@ -57,7 +57,6 @@ def make_inputs(position: tuple[int, int, int, int, int]):
     else:
         return out_blue + out_red
 
-input_size = 64 * 64 * 2
 
 class LazyFreckersDataset(Dataset):
     def __init__(self):
@@ -114,19 +113,45 @@ class FreckersDataset(Dataset):
                 dataset = pickle.load(f)
 
             for i in range(len(dataset.positions)):
-                modes = dataset.positions[i][4]
-                X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
-
+                positions = dataset.positions[i]
                 outcome = dataset.outcomes[i]
-                score = 0.5
-                if outcome == 0:
-                    score = 1
-                elif outcome == 1:
-                    score = 0
+                lily = bitmask_to_array(positions[0])
+                red = bitmask_to_array(positions[1])
+                blue = list(reversed(bitmask_to_array(positions[2])))
+                turn = positions[3]
+                moves = positions[4]
 
-                scaler = 0.99 ** max(0, 60 - modes)
-                norm = (score - 0.5) * 2 * scaler
-                y.append([(norm + 1) / 2])
+                if turn == 0:
+                    X.append([*lily, *red, *list(reversed(lily)), *blue])
+                else:
+                    X.append([*list(reversed(lily)), *blue, *lily, *red])
+
+                if outcome == turn:
+                    score = 1
+                elif outcome == 1 - turn:
+                    score = 0
+                else:
+                    score = 0.5
+
+                # scaler = 0.98 ** max(0, 70 - moves)
+                # norm = (score - 0.5) * 2 * scaler
+                # y.append([(norm + 1) / 2])
+
+                y.append([score])
+
+                # modes = dataset.positions[i][4]
+                # X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
+                #
+                # outcome = dataset.outcomes[i]
+                # score = 0.5
+                # if outcome == 0:
+                #     score = 1
+                # elif outcome == 1:
+                #     score = 0
+                #
+                # scaler = 0.99 ** max(0, 60 - modes)
+                # norm = (score - 0.5) * 2 * scaler
+                # y.append([(norm + 1) / 2])
                 # y.append([score])
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
@@ -142,17 +167,15 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        # use layer1 for both sides, reversing the blue side inputs in training
-        # in training, apply layer1 to both parts, concat, then rest
-        self.layer1 = nn.Linear(input_size // 2, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(64 * 2, 32, dtype=torch.float32)
+        self.layer1 = nn.Linear(8*8*2, 32, dtype=torch.float32)
+        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
         self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
-        x1 = self.layer1(x[:, :64*64])
-        x2 = self.layer1(x[:, 64*64:])
+        x1 = self.layer1(torch.concat((x[:, :64], x[:, 64:2*64]), dim=1))
+        x2 = self.layer1(torch.concat((x[:, 2*64:3*64], x[:, 3*64:]), dim=1))
         x = F.relu(torch.concat((x1, x2), dim=1)).clamp(max=1)
         x = F.relu(self.layer2(x)).clamp(max=1)
         x = F.relu(self.layer3(x)).clamp(max=1)
@@ -182,12 +205,12 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.0001, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.0005, eps=1e-8)
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
     # )
 
-    dataset = LazyFreckersDataset()
+    dataset = FreckersDataset()
     train_dataset, test_dataset = random_split(dataset, [0.8, 0.2])
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
