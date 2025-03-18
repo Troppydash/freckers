@@ -423,6 +423,10 @@ namespace engine {
                 m_pos.pop(move);
                 pop_nnue(move);
 
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
+
                 if (score > best_score) {
                     best_score = score;
                 }
@@ -492,7 +496,7 @@ namespace engine {
                 move null = move::null();
                 m_pos.push(null);
 
-                int r = 2;
+                int r = 3;
                 std::vector<move> child_pv_line;
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
                 m_pos.pop(null);
@@ -544,6 +548,10 @@ namespace engine {
                 }
                 m_pos.pop(move);
                 pop_nnue(move);
+
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
 
                 if (score > best_score) {
                     best_score = score;
@@ -653,32 +661,9 @@ namespace engine {
                 pv_line.clear();
                 int score = negamax(depth, 0, alpha, beta, pv_line);
 
-
-                if (m_timer.m_is_stopped) {
-                    // TODO: also account for asp window
-                    if (best_move.is_null() && depth == 1) {
-                        best_move = pv_line[0];
-                    }
-                    break;
+                if (!pv_line.empty()) {
+                    best_move = pv_line[0];
                 }
-
-                if (score <= alpha || score >= beta) {
-                    alpha = -param::inf;
-                    beta = param::inf;
-                    continue;
-                }
-
-                if (new_score != nullptr) {
-                    *new_score = score;
-                }
-
-                best_move = pv_line[0];
-                if (depth <= 0) {
-                    int gap = 5 * 100;
-                    alpha = score - gap;
-                    beta = score + gap;
-                }
-
 
                 if (verbose) {
                     std::chrono::milliseconds now = m_timer.now();
@@ -697,6 +682,29 @@ namespace engine {
                     last_searched = m_searched;
                 }
 
+                if (m_timer.m_is_stopped) {
+                    // TODO: also account for asp window
+//                    if (best_move.is_null() && depth == 1) {
+//                        best_move = pv_line[0];
+//                    }
+                    break;
+                }
+
+//                if (score <= alpha || score >= beta) {
+//                    alpha = -param::inf;
+//                    beta = param::inf;
+//                    continue;
+//                }
+
+                if (new_score != nullptr) {
+                    *new_score = score;
+                }
+
+//                if (depth <= 0) {
+//                    int gap = 5 * 100;
+//                    alpha = score - gap;
+//                    beta = score + gap;
+//                }
 
                 depth += 1;
             }

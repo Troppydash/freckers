@@ -16,10 +16,13 @@ def playoff(engine1, engine2):
     pos = Pos()
 
     # random moves
-    left = 8
+    left = 5
     while pos.state() == pos.NONE and left > 0:
         if random.random() < 0.9:
-            m, _ = engine1.play(game=pos, ts=ts, verbose=False)
+            if random.random() < 0.5:
+                m, _ = engine1.play(game=pos, ts=ts, verbose=False)
+            else:
+                m, _ = engine2.play(game=pos, ts=ts, verbose=False)
             pos.push(m)
         else:
             moves = pos.get_moves()
@@ -61,7 +64,7 @@ def round(agents, elos, names):
     n = len(agents)
     k = 40
 
-    with multiprocessing.Pool(10) as p:
+    with multiprocessing.Pool(6) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -104,15 +107,15 @@ def plot_elos(elos):
         ax.plot(list(range(len(value))), value, label=key)
 
     ax.set_xlim([len(elos[key]) - 100, len(elos[key])])
-    fig.legend()
+    fig.legend(loc='lower right')
     ax.grid()
     fig.savefig("elos.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    agents = [agents.V1, agents.V2, agents.V3, agents.V31, agents.Latest]
-    names = ["v1", "v2", "v3", "v31", "latest"]
+    agents = [agents.V1, agents.V2, agents.V3, agents.V31, agents.V32, agents.Latest]
+    names = ["v1", "v2", "v3", "v31", "v32", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 
