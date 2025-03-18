@@ -168,7 +168,7 @@ void test_position() {
         std::cout << "[board]\n"
                   << pos.display() << "\n";
         engine::computer engine{pos, get_weights("../")};
-        engine.search(3000, nullptr, true);
+        engine.search(10000, nullptr, true);
         std::cout << "[real] " << win << "\n\n";
     }
 }

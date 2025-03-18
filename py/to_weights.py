@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 base = './models/session2/'
-file = f"{base}model_380.pt"
+file = f"{base}model_120.pt"
 model = torch.load(file)
 
 parameters = {}

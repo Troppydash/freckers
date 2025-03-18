@@ -1,28 +1,18 @@
-import matplotlib.pyplot as plt
-import pandas as pd
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split
-from torch.utils.data import Dataset
-import torch.optim as optim
 
-import numpy as np
-import random
-from functools import partial
+
 import os
-import tempfile
-from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import random_split
-import torchvision
-import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, random_split
+from torch.utils.data import Dataset
 import glob
-import math
 import pickle
+
+import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 3
@@ -37,6 +27,74 @@ def bitmask_to_array(mask: int):
             arr.append(0)
 
     return arr
+
+
+def make_inputs(position: tuple[int, int, int, int, int]):
+    lily, red, blue, turn, mode = position
+
+    # make red
+    out_red = []
+    for i in range(64):
+        for j in range(64):
+            if lily & (1<<i) and red & (1<<j):
+                out_red.append(1)
+            else:
+                out_red.append(0)
+
+    # make blue, but reversed
+    out_blue = []
+    for i in range(64):
+        for j in range(64):
+            if lily & (1 << i) and blue & (1 << j):
+                out_blue.append(1)
+            else:
+                out_blue.append(0)
+
+    out_blue = list(reversed(out_blue))
+
+    if turn == 0:
+        return out_red + out_blue
+    else:
+        return out_blue + out_red
+
+input_size = 64 * 64 * 2
+
+class LazyFreckersDataset(Dataset):
+    def __init__(self):
+        self.mapping = []
+        for file in glob.glob('./sessions/*.pk'):
+            if file.endswith('_backup.pk'):
+                continue
+
+            if not os.path.basename(file).startswith(session):
+                continue
+
+            print(f'[dataset] loading {os.path.basename(file)}')
+
+            with open(file, 'rb') as f:
+                dataset = pickle.load(f)
+
+            for i in range(len(dataset.positions)):
+                self.mapping.append((dataset.positions[i], dataset.outcomes[i]))
+
+
+    def __len__(self):
+        return len(self.mapping)
+
+    def __getitem__(self, index):
+        positions, outcome = self.mapping[index]
+        x = make_inputs(positions)
+
+        if outcome == positions[3]:
+            score = 1
+        elif outcome == 1 - positions[3]:
+            score = 0
+        else:
+            score = 0.5
+        y = [score]
+
+        return torch.tensor(x, dtype=torch.float32).reshape(-1, input_size), torch.tensor(y, dtype=torch.float32)
+
 
 class FreckersDataset(Dataset):
     def __init__(self):
@@ -56,7 +114,7 @@ class FreckersDataset(Dataset):
                 dataset = pickle.load(f)
 
             for i in range(len(dataset.positions)):
-                # modes = dataset.positions[i][4]
+                modes = dataset.positions[i][4]
                 X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
 
                 outcome = dataset.outcomes[i]
@@ -66,10 +124,10 @@ class FreckersDataset(Dataset):
                 elif outcome == 1:
                     score = 0
 
-                # scaler = 0.97 ** max(0, 60 - modes)
-                # norm = (score - 0.5) * 2 * scaler
-                # y.append([(norm + 1) / 2])
-                y.append([score])
+                scaler = 0.99 ** max(0, 60 - modes)
+                norm = (score - 0.5) * 2 * scaler
+                y.append([(norm + 1) / 2])
+                # y.append([score])
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
         self.y = torch.tensor(y, dtype=torch.float32)
@@ -84,10 +142,31 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(input_size, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
+        # use layer1 for both sides, reversing the blue side inputs in training
+        # in training, apply layer1 to both parts, concat, then rest
+        self.layer1 = nn.Linear(input_size // 2, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(64 * 2, 32, dtype=torch.float32)
         self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
+
+    def forward(self, x):
+        x = torch.flatten(x, 1)
+        x1 = self.layer1(x[:, :64*64])
+        x2 = self.layer1(x[:, 64*64:])
+        x = F.relu(torch.concat((x1, x2), dim=1)).clamp(max=1)
+        x = F.relu(self.layer2(x)).clamp(max=1)
+        x = F.relu(self.layer3(x)).clamp(max=1)
+        x = (self.layer4(x)).clamp(min=0, max=1)
+
+        return x
+
+class SimpleNeuralNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer1 = nn.Linear(input_size, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 32, dtype=torch.float32)
+        self.layer4 = nn.Linear(32, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -103,20 +182,20 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    # optimizer = optim.Adam(net.parameters(), lr=0.0002, eps=1e-8)
-    optimizer = optim.SGD(
-        net.parameters(), lr=config["lr"], momentum=config["momentum"]
-    )
+    optimizer = optim.AdamW(net.parameters(), lr=0.0001, eps=1e-8)
+    # optimizer = optim.SGD(
+    #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
+    # )
 
-    dataset = FreckersDataset()
+    dataset = LazyFreckersDataset()
     train_dataset, test_dataset = random_split(dataset, [0.8, 0.2])
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
     train_dataloader = DataLoader(
-        train_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=6
+        train_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=12
     )
     test_dataloader = DataLoader(
-        test_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=6
+        test_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=12
     )
 
 
@@ -181,7 +260,7 @@ def train(config):
 if __name__ == '__main__':
     train(
         {
-            "lr": 0.0002,
+            "lr": 0.00004,
             "batch_size": 4096 * 4,
             "test_batch": 4096 * 8,
             "momentum": 0.9,

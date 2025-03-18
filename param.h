@@ -13,7 +13,7 @@ namespace param {
     int alpha_flag = 1;
     int beta_flag = 2;
 
-    int max_depth = 50;
+    int max_depth = 40;
 
     int base_score = (1 << 20);
     int pv_move_score = 100;

@@ -28,7 +28,7 @@ namespace board {
         const static int COLS = 8;
 
         const static mask TOP = 0b11111111;
-        const static mask BOTTOM = (mask) 0b11111111 << ((ROWS - 1) * COLS);
+        const static mask BOTTOM = ((mask) 0b11111111) << ((ROWS - 1) * COLS);
         const static mask ALL = UINT64_MAX;
         const static mask LINE = 0b100000001000000010000000100000001000000010000000100000001;
         const static mask HLINE = 0b11111111;
@@ -327,10 +327,12 @@ namespace board {
                     // Update the bitmask position of the red frog
                     else if (tmp == "R") {
                         red |= (1ull << i);
+                        lilypads |= (1ull << i);
                     }
                     // Update the bitmask position of the blue frog
                     else if (tmp == "B") {
                         blue |= (1ull << i);
+                        lilypads |= (1ull << i);
                     }
                 }
             }
@@ -401,10 +403,15 @@ namespace board {
                     all_jumps |= new_jumps;
                 }
 
-                int row = i / bitboard::ROWS;
+                int row = i / bitboard::COLS;
 
                 all_jumps ^= piece;
                 all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
+//                if (m_turn == board::RED) {
+//                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
+//                } else {
+//                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
+//                }
                 move::from_mask(all_jumps, piece, moves);
             }
 
