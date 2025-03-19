@@ -16,7 +16,7 @@ import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
-session = "session2"
+session = "session3"
 
 def bitmask_to_array(mask: int):
     arr = []
@@ -167,8 +167,8 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8*8*2, 32, dtype=torch.float32)
-        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
+        self.layer1 = nn.Linear(8*8*2, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(128, 32, dtype=torch.float32)
         self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
@@ -205,7 +205,7 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.0005, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.0002, eps=1e-8)
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
     # )

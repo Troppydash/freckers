@@ -19,7 +19,12 @@ def play_against(player_turn, agent_class, ts):
                             player_move = move
                             break
                 else:
-                    start_row, start_col, end_row, end_col = map(int, stdin.split())
+                    data = list(map(int, stdin.split()))
+                    if len(data) != 4:
+                        print('unknown input')
+                        continue
+
+                    start_row, start_col, end_row, end_col = data
 
                     start = 1 << (start_row * 8 + start_col)
                     end = 1 << (end_row * 8 + end_col)

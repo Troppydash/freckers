@@ -64,7 +64,7 @@ def round(agents, elos, names):
     n = len(agents)
     k = 40
 
-    with multiprocessing.Pool(6) as p:
+    with multiprocessing.Pool(4) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -114,8 +114,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V1, agents.V2, agents.V3, agents.V31, agents.V32, agents.Latest]
-    names = ["v1", "v2", "v3", "v31", "v32", "latest"]
+    agents = [agents.V1, agents.V2, agents.V3, agents.V32, agents.V4, agents.Latest]
+    names = ["v1", "v2", "v3", "v32", "v4", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 
