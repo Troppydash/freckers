@@ -100,6 +100,7 @@ namespace nnue {
             for (int i = 1; i < weights.size(); ++i) {
                 m_layers.push_back(layer{weights[i]});
             }
+            m_layers[m_layers.size()-1].m_accum = true;
         }
 
         void init(std::vector<int32_t> &red, std::vector<int32_t> &blue) {
@@ -115,7 +116,7 @@ namespace nnue {
             m_blue_accum.forward(blue);
         }
 
-        double compute(int flip) {
+        int compute(int flip) {
             std::vector<int32_t> output;
             if (flip) {
                 for (const int32_t &i: m_blue_accum.m_output) {
@@ -140,7 +141,9 @@ namespace nnue {
                 m_layers[i].forward(m_layers[i - 1].m_output);
             }
 
-            return static_cast<double>(m_layers[m_layers.size() - 1].m_output[0]) / (double) INT16_SCALE;
+            int64_t eval = m_layers[m_layers.size() - 1].m_output[0];
+            return static_cast<int>(eval * 40 * 100 / INT16_SCALE);
+//            return std::max(-1.0, std::min(1.0, static_cast<double>(m_layers[m_layers.size() - 1].m_output[0]) / (double) INT16_SCALE));
         }
 
         void push_red(int idx) {

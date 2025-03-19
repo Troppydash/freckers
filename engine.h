@@ -130,7 +130,7 @@ namespace engine {
 
         int m_history[2][64][64];
         int m_lmr[50][100];
-        move m_killers[100];
+        move m_killers[100][2];
 
         nnue::seq m_nnue;
 
@@ -145,19 +145,21 @@ namespace engine {
             }
 
             for (auto &m: m_killers) {
-                m = move::null();
+                m[0] = move::null();
+                m[1] = move::null();
             }
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 4) + move * 1;
+                    m_lmr[depth][move] = std::max(1, depth / 4) + move / 4;
                 }
             }
         }
 
         int nnue_evaluate() {
-            double score = m_nnue.compute(m_pos.m_turn == board::BLUE);
-            return static_cast<int>((score - 0.5) * 2.0 * 40.0 * 100.0);
+            return m_nnue.compute(m_pos.m_turn == board::BLUE);
+            return std::min(40, std::max(-40, m_nnue.compute(m_pos.m_turn == board::BLUE)));
+//            return static_cast<int>(score * 40.0 * 100.0);
             //            score = std::min(0.9999, std::max(0.0001, score));
             //            int move_tempo = 0;
             //            return static_cast<int>(-400.0 * log(1.0 / score - 1.0)) + move_tempo;
@@ -211,7 +213,7 @@ namespace engine {
 
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
-                } else if (move == m_killers[ply]) {
+                } else if (move == m_killers[ply][0]) {
                     score += param::base_score + param::killer_move_score;
                 } else if (!move.is_grow()) {
                     // end game rankings
@@ -293,7 +295,10 @@ namespace engine {
 
         void store_killer(int ply, const move &killer) {
             if (!killer.is_jump()) {
-                m_killers[ply] = killer;
+                if (m_killers[ply][0] != killer) {
+//                    m_killers[ply][1] = m_killers[ply][0];
+                    m_killers[ply][0] = killer;
+                }
             }
         }
 
@@ -684,27 +689,27 @@ namespace engine {
 
                 if (m_timer.m_is_stopped) {
                     // TODO: also account for asp window
-//                    if (best_move.is_null() && depth == 1) {
-//                        best_move = pv_line[0];
-//                    }
+                    //                    if (best_move.is_null() && depth == 1) {
+                    //                        best_move = pv_line[0];
+                    //                    }
                     break;
                 }
 
-//                if (score <= alpha || score >= beta) {
-//                    alpha = -param::inf;
-//                    beta = param::inf;
-//                    continue;
-//                }
+                //                if (score <= alpha || score >= beta) {
+                //                    alpha = -param::inf;
+                //                    beta = param::inf;
+                //                    continue;
+                //                }
 
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
 
-//                if (depth <= 0) {
-//                    int gap = 5 * 100;
-//                    alpha = score - gap;
-//                    beta = score + gap;
-//                }
+                //                if (depth <= 0) {
+                //                    int gap = 5 * 100;
+                //                    alpha = score - gap;
+                //                    beta = score + gap;
+                //                }
 
                 depth += 1;
             }

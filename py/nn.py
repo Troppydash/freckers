@@ -1,5 +1,3 @@
-
-
 import os
 
 import torch
@@ -16,7 +14,8 @@ import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
-session = "session3"
+session = "session4"
+
 
 def bitmask_to_array(mask: int):
     arr = []
@@ -36,7 +35,7 @@ def make_inputs(position: tuple[int, int, int, int, int]):
     out_red = []
     for i in range(64):
         for j in range(64):
-            if lily & (1<<i) and red & (1<<j):
+            if lily & (1 << i) and red & (1 << j):
                 out_red.append(1)
             else:
                 out_red.append(0)
@@ -65,7 +64,8 @@ class LazyFreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not os.path.basename(file).startswith(session):
+            if not (os.path.basename(file).startswith(session) or os.path.basename(file).startswith('session3')):
+                print(f'[dataset] skipping {os.path.basename(file)}')
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
@@ -75,7 +75,6 @@ class LazyFreckersDataset(Dataset):
 
             for i in range(len(dataset.positions)):
                 self.mapping.append((dataset.positions[i], dataset.outcomes[i]))
-
 
     def __len__(self):
         return len(self.mapping)
@@ -104,7 +103,7 @@ class FreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not os.path.basename(file).startswith(session):
+            if not (os.path.basename(file).startswith(session) or os.path.basename(file).startswith('session3')):
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
@@ -129,14 +128,13 @@ class FreckersDataset(Dataset):
                 if outcome == turn:
                     score = 1
                 elif outcome == 1 - turn:
-                    score = 0
+                    score = -1
                 else:
-                    score = 0.5
+                    score = 0
 
                 # scaler = 0.98 ** max(0, 70 - moves)
                 # norm = (score - 0.5) * 2 * scaler
                 # y.append([(norm + 1) / 2])
-
                 y.append([score])
 
                 # modes = dataset.positions[i][4]
@@ -167,21 +165,22 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8*8*2, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(128, 32, dtype=torch.float32)
-        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
+        self.layer1 = nn.Linear(8 * 8 * 2, 32, dtype=torch.float32)
+        self.layer2 = nn.Linear(64, 16, dtype=torch.float32)
+        self.layer3 = nn.Linear(16, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
-        x1 = self.layer1(torch.concat((x[:, :64], x[:, 64:2*64]), dim=1))
-        x2 = self.layer1(torch.concat((x[:, 2*64:3*64], x[:, 3*64:]), dim=1))
+        x1 = self.layer1(torch.concat((x[:, :64], x[:, 64:2 * 64]), dim=1))
+        x2 = self.layer1(torch.concat((x[:, 2 * 64:3 * 64], x[:, 3 * 64:]), dim=1))
         x = F.relu(torch.concat((x1, x2), dim=1)).clamp(max=1)
         x = F.relu(self.layer2(x)).clamp(max=1)
         x = F.relu(self.layer3(x)).clamp(max=1)
-        x = (self.layer4(x)).clamp(min=0, max=1)
+        x = (self.layer4(x))
 
         return x
+
 
 class SimpleNeuralNetwork(nn.Module):
     def __init__(self):
@@ -205,7 +204,7 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.0002, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.001, eps=1e-8)
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
     # )
@@ -220,7 +219,6 @@ def train(config):
     test_dataloader = DataLoader(
         test_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=12
     )
-
 
     xs = []
     ys = []

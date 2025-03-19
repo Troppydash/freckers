@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 200
+    ts = 300
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -18,15 +18,15 @@ def playoff(engine1, engine2):
     # random moves
     left = 5
     while pos.state() == pos.NONE and left > 0:
-        if random.random() < 0.9:
-            if random.random() < 0.5:
-                m, _ = engine1.play(game=pos, ts=ts, verbose=False)
-            else:
-                m, _ = engine2.play(game=pos, ts=ts, verbose=False)
-            pos.push(m)
+        # if random.random() < 0.9:
+        if random.random() < 0.5:
+            m, _ = engine1.play(game=pos, ts=ts, verbose=False)
         else:
-            moves = pos.get_moves()
-            pos.push(random.choice(moves))
+            m, _ = engine2.play(game=pos, ts=ts, verbose=False)
+        pos.push(m)
+        # else:
+        # moves = pos.get_moves()
+        # pos.push(random.choice(moves))
         left -= 1
 
     scores = [0, 0]
@@ -62,13 +62,15 @@ def play(x):
 
 def round(agents, elos, names):
     n = len(agents)
-    k = 40
+    k = 30
 
-    with multiprocessing.Pool(4) as p:
+    with multiprocessing.Pool(12) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
                 matchups.append((i, j, agents[i], agents[j]))
+
+        random.shuffle(matchups)
 
         results = p.map(play, matchups)
 
@@ -114,8 +116,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V1, agents.V2, agents.V3, agents.V32, agents.V4, agents.Latest]
-    names = ["v1", "v2", "v3", "v32", "v4", "latest"]
+    agents = [agents.V32, agents.V4, agents.Latest]
+    names = [ "v32", "v4", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 

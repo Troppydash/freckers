@@ -76,6 +76,7 @@ class Session:
                     moves = pos.get_moves()
                     move = random.choice(moves)
                     pos.push(move)
+                    evals.append(0)
                 else:
                     if pos.turn == Pos.RED:
                         move, score = past_agent.play(pos, ts, False)
@@ -144,7 +145,16 @@ class Session3(Session):
     def current_agent(self):
         return agents.V32, "(current)"
 
+class Session4(Session):
+    # ts = 200
+    # 0.85
+    def past_agents(self):
+        return [agents.V3, agents.V31, agents.V32, agents.V4, agents.V4, agents.V4, agents.V4], ["v3", "v3.1", "v3.2", "v4(0)", "v4(1)", "v4(2)", "v4(3)"]
+
+    def current_agent(self):
+        return agents.V4, "(current)"
+
 
 if __name__ == '__main__':
-    session = Session3("session3")
+    session = Session4("session4")
     session.generate()

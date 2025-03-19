@@ -47,5 +47,24 @@ def play_against(player_turn, agent_class, ts):
 
 
 
+def play_engines(engine1, engine2, ts):
+    engine1: engine.Engine = engine1()
+    engine2: engine.Engine = engine2()
+    board = engine.Pos()
+    while board.state() == engine.Pos.NONE:
+        board.display()
+
+        if board.turn == 0:
+            print('engine1')
+            move, _ = engine1.play(board, ts, True)
+            board.push(move)
+        else:
+            print('engine2')
+            move, _ = engine2.play(board, ts, True)
+            board.push(move)
+
+
+
 if __name__ == '__main__':
-    play_against(engine.Pos.RED, agents.Latest, 2000)
+    # play_against(engine.Pos.RED, agents.Latest, 2000)
+    play_engines(agents.V2, agents.Latest, 2000)
