@@ -159,7 +159,7 @@ namespace engine {
         int nnue_evaluate() {
             return m_nnue.compute(m_pos.m_turn == board::BLUE);
             return std::min(40, std::max(-40, m_nnue.compute(m_pos.m_turn == board::BLUE)));
-//            return static_cast<int>(score * 40.0 * 100.0);
+            //            return static_cast<int>(score * 40.0 * 100.0);
             //            score = std::min(0.9999, std::max(0.0001, score));
             //            int move_tempo = 0;
             //            return static_cast<int>(-400.0 * log(1.0 / score - 1.0)) + move_tempo;
@@ -224,10 +224,11 @@ namespace engine {
                     int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    if ((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) {
-                        // don't consider the move if we started at end
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
+                    if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
+                        // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
-                    } else if ((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) {
+                    } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
                     } else if (vgap >= 2) {
@@ -296,7 +297,7 @@ namespace engine {
         void store_killer(int ply, const move &killer) {
             if (!killer.is_jump()) {
                 if (m_killers[ply][0] != killer) {
-//                    m_killers[ply][1] = m_killers[ply][0];
+                    //                    m_killers[ply][1] = m_killers[ply][0];
                     m_killers[ply][0] = killer;
                 }
             }
@@ -481,6 +482,10 @@ namespace engine {
 
             bool is_root = ply == 0;
             bool is_pv_node = (beta - alpha) != 1;
+
+//            if (m_pos.can_reach_end()) {
+//                depth++;
+//            }
 
             if (depth <= 0) {
                 return qsearch(ply, 0, alpha, beta, pv_line);

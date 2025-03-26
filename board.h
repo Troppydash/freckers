@@ -5,12 +5,12 @@
 #ifndef FRECKER_BOARD_H
 #define FRECKER_BOARD_H
 
+#include "colors.h"
 #include <cinttypes>
 #include <cstdio>
 #include <sstream>
 #include <string>
 #include <vector>
-#include "colors.h"
 
 namespace board {
     using mask = uint64_t;
@@ -347,6 +347,20 @@ namespace board {
             return pos{lilypads, red, blue, turn, 0};
         }
 
+        bool can_reach_end() {
+            mask sides[2] = {bitboard::BOTTOM, bitboard::TOP};
+            for (auto move : get_moves()) {
+                if (move.is_grow())
+                    continue;
+
+                if (move.m_end & sides[m_turn]) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         bool has_jumps() const {
             return !get_jump_moves().empty();
             // TODO: fix this so that it detects any series of forward jumps not just immediate
@@ -425,6 +439,11 @@ namespace board {
 
             // Return all the available jumping move
             return moves;
+        }
+
+        int num_finished_piece(int side) {
+            mask sides[2] = {bitboard::BOTTOM, bitboard::TOP};
+            return __builtin_popcountll(m_players[side] & sides[side]);
         }
 
         int num_unfinished_piece() {
