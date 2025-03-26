@@ -1,10 +1,11 @@
 #include "board.h"
+#include "endgame.h"
 #include "engine.h"
 #include <fstream>
 #include <iostream>
 #include <map>
 
-std::vector<std::string> get_weights(const std::string& base) {
+std::vector<std::string> get_weights(const std::string &base) {
     return {base + "./weights/weight_1.txt", base + "./weights/weight_2.txt", base + "./weights/weight_3.txt", base + "./weights/weight_4.txt"};
 }
 
@@ -173,9 +174,48 @@ void test_position() {
     }
 }
 
+void test_a_star_position() {
+    std::string file = "../endgame_positions.txt";
+    std::ifstream buf{file};
+
+    std::string tmp;
+    while (buf >> tmp) {
+        std::string board;
+        for (int i = 0; i < 10; ++i) {
+            std::string newline;
+            std::getline(buf, newline);
+            board += newline + "\n";
+        }
+
+        std::string turn;
+        buf >> turn;
+        int t = board::NONE;
+        if (turn == "RED") {
+            t = board::RED;
+        } else if (turn == "BLUE") {
+            t = board::BLUE;
+        }
+
+        int win;
+        buf >> win;
+
+        board::pos pos = board::pos::from_string(board, t);
+        std::cout << "[board]\n"
+                  << pos.display() << "\n";
+
+        endgame::a_star engine{board::BLUE, 0, 0};
+        board::move best_move;
+        int result = engine.search(pos, best_move);
+        std::cout << "[search] " << result << "\n";
+        std::cout << "[search] searched " << engine.m_counter << "\n";
+        std::cout << "[real] " << win << "\n\n";
+    }
+}
+
+
 int main() {
-//    test_position();
-//    return 0;
+    test_position();
+    return 0;
 
     board::pos pos;
 

@@ -134,8 +134,12 @@ namespace engine {
 
         nnue::seq m_nnue;
 
+        endgame::a_star m_solver_red;
+        endgame::a_star m_solver_blue;
+
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_nnue(weights) {
+            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_nnue(weights),
+              m_solver_red(board::RED, 0, 0), m_solver_blue(board::BLUE, 0, 0) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
@@ -456,6 +460,85 @@ namespace engine {
             return best_score;
         }
 
+        bool handle_crossed(int &score, int &turns, int depth, int ply, std::vector<move> &pv_line) {
+            int results[2] = {0, 0};
+            board::move best_red_move = board::move::null();
+            board::move best_blue_move = board::move::null();
+            m_solver_red.m_bound = depth * 2000;
+            m_solver_red.m_best_score = 1e9;
+            m_solver_blue.m_bound = depth * 2000;
+            m_solver_blue.m_best_score = 1e9;
+
+            // use heuristic to find who is first
+            //            int eval = evaluate();
+            //            bool red_better = (eval > 0 && m_pos.m_turn == board::RED) || (eval < 0 && m_pos.m_turn == board::BLUE);
+            // endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)
+            if (m_pos.crossed_gap().first <= m_pos.crossed_gap().second) {
+                results[0] = m_solver_red.search(m_pos, best_red_move);
+                m_searched += m_solver_red.m_counter;
+                if (results[0] == -1) {
+                    return false;
+                }
+
+                m_timer.check();
+                if (m_timer.m_is_stopped) {
+                    return false;
+                }
+
+                m_solver_blue.m_best_score = results[0];
+                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+                m_searched += m_solver_blue.m_counter;
+                if (results[1] == -1) {
+                    return false;
+                }
+            } else {
+                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+                m_searched += m_solver_blue.m_counter;
+                if (results[1] == -1) {
+                    return false;
+                }
+
+                m_timer.check();
+                if (m_timer.m_is_stopped) {
+                    return false;
+                }
+
+                m_solver_red.m_best_score = results[1];
+                results[0] = m_solver_red.search(m_pos, best_red_move);
+                m_searched += m_solver_red.m_counter;
+                if (results[0] == -1) {
+                    return false;
+                }
+            }
+
+            if (m_pos.m_turn == board::RED) {
+                pv_line.push_back(best_red_move);
+            } else {
+                pv_line.push_back(best_blue_move);
+            }
+
+            if (m_pos.m_turn == board::RED) {
+                if (results[board::BLUE] < results[board::RED]) {
+                    turns = results[board::BLUE] * 2;
+                    score = -param::inf + ply + turns;
+                } else {
+                    turns = results[board::RED] * 2 - 1;
+                    score = param::inf - ply - turns;
+                }
+            } else {
+                if (results[board::RED] < results[board::BLUE]) {
+                    turns = results[board::RED] * 2;
+                    score = -param::inf + ply + turns;
+                } else {
+                    turns = results[board::BLUE] * 2 - 1;
+                    score = param::inf - ply - turns;
+                }
+            }
+
+            return true;
+        }
+
+
         int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, bool do_null = true) {
             m_searched += 1;
 
@@ -483,10 +566,6 @@ namespace engine {
             bool is_root = ply == 0;
             bool is_pv_node = (beta - alpha) != 1;
 
-//            if (m_pos.can_reach_end()) {
-//                depth++;
-//            }
-
             if (depth <= 0) {
                 return qsearch(ply, 0, alpha, beta, pv_line);
             }
@@ -496,10 +575,21 @@ namespace engine {
             if (should_use && !is_root) {
                 return tt_score;
             }
+            //  && (m_pos.crossed_gap().first < 3 || m_pos.crossed_gap().second < 3)
+            if (m_pos.has_crossed() && depth > 6) {
+                int best_score = 0;
+                int turns = 0;
+                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+
+                if (ok) {
+                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
+
+                    return best_score;
+                }
+            }
 
             auto moves = m_pos.get_moves();
             auto scored_moves = score_moves(moves, tt_move, ply);
-
 
             // null move pruning
             if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {

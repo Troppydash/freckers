@@ -36,6 +36,7 @@ namespace board {
         const static mask TOP_HALF = (HLINE) | (HLINE << (1 * COLS)) | (HLINE << (2 * COLS)) | (HLINE << (3 * COLS));
         const static mask BOTTOM_HALF =
                 (HLINE << (4 * COLS)) | (HLINE << (5 * COLS)) | (HLINE << (6 * COLS)) | (HLINE << (7 * COLS));
+        constexpr static mask ENDS[2] = {BOTTOM, TOP};
 
         // A function to convert a vector of vectors of bits
         // to a bit mask
@@ -349,7 +350,7 @@ namespace board {
 
         bool can_reach_end() {
             mask sides[2] = {bitboard::BOTTOM, bitboard::TOP};
-            for (auto move : get_moves()) {
+            for (auto move: get_moves()) {
                 if (move.is_grow())
                     continue;
 
@@ -449,6 +450,45 @@ namespace board {
         int num_unfinished_piece() {
             return 6 - __builtin_popcountll(m_players[RED] & bitboard::BOTTOM) + 6 -
                    __builtin_popcountll(m_players[BLUE] & bitboard::TOP);
+        }
+
+        std::vector<move> get_piece_moves(mask piece) const {
+            std::vector<move> moves;
+
+            // direct moves
+            mask direct = 0;
+            if (m_turn == RED) {
+                direct = bitboard::dilate_down(piece);
+            } else {
+                direct = bitboard::dilate_up(piece);
+            }
+            direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
+
+            move::from_mask(direct, piece, moves);
+
+            // jumps
+            mask obst = m_players[0] | m_players[1];
+            mask all_jumps = piece;
+            mask next_jumps = piece;
+            while (next_jumps > 0) {
+                // broadcast
+                mask new_jumps = 0;
+                if (m_turn == RED) {
+                    new_jumps = bitboard::jump_down(next_jumps, obst);
+                } else {
+                    new_jumps = bitboard::jump_up(next_jumps, obst);
+                }
+
+                new_jumps &= m_lilypads & (~obst);
+                next_jumps = new_jumps & (~all_jumps);
+                all_jumps |= new_jumps;
+            }
+
+
+            all_jumps ^= piece;
+            move::from_mask(all_jumps, piece, moves);
+
+            return moves;
         }
 
         //??
@@ -592,6 +632,19 @@ namespace board {
             return NONE;
         }
 
+        // check if two sides crossed
+        bool has_crossed() {
+            int top_red_row = __builtin_ctzll(m_players[RED]) / 8;
+            int bottom_blue_row = (63-__builtin_clzll(m_players[BLUE])) / 8;
+            return top_red_row + 1 > bottom_blue_row;
+        }
+
+        std::pair<int, int> crossed_gap() {
+            int top_red_row = __builtin_ctzll(m_players[RED]) / 8;
+            int bottom_blue_row = (63-__builtin_clzll(m_players[BLUE])) / 8;
+            return {top_red_row, 7 - bottom_blue_row};
+        }
+
         // A function to print the board
         std::string display() const {
             std::string out;
@@ -629,6 +682,10 @@ namespace board {
 
         uint64_t hash() const {
             return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
+        }
+
+        bool operator==(const pos &other) const {
+            return m_turn == other.m_turn && m_players[0] == other.m_players[0] && m_players[1] == other.m_players[1] && m_lilypads == other.m_lilypads && m_moves == other.m_moves;
         }
     };
 }// namespace board
