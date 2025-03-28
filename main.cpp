@@ -214,8 +214,8 @@ void test_a_star_position() {
 
 
 int main() {
-    test_position();
-    return 0;
+//    test_position();
+//    return 0;
 
     board::pos pos;
 
@@ -230,13 +230,13 @@ int main() {
 
         if (pos.m_turn == board::RED) {
             engine::computer engine{pos, get_weights("../")};
-            auto move = engine.search(1000, nullptr, true);
+            auto move = engine.search(10000, nullptr, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
 
         } else {
             engine::computer engine{pos, get_weights("../")};
-            auto move = engine.search(1000, nullptr, true);
+            auto move = engine.search(10000, nullptr, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
         }

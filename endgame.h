@@ -111,10 +111,10 @@ namespace endgame {
 
             board::pos initial = pos;
             initial.m_turn = m_side;
-            queue.push({m_side, 0, initial, board::move::null(), nullptr});
+            node initial_node{m_side, 0, initial, board::move::null(), nullptr};
+            queue.push(initial_node);
 
             std::unordered_set<node, node_hash> visited;
-            m_counter = 0;
             while (!queue.empty()) {
                 m_counter += 1;
                 node top = queue.top();
@@ -146,10 +146,10 @@ namespace endgame {
                     int depth = top.depth;
 
                     node &current = top;
-                    int to_end = 0;
+//                    int to_end = 0;
                     while (current.depth > 1) {
                         current = *current.parent;
-                        to_end += 1;
+//                        to_end += 1;
 //                        m_cache[current] = to_end;
                     }
                     best_move = current.move;

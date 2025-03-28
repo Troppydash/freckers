@@ -464,18 +464,18 @@ namespace engine {
             int results[2] = {0, 0};
             board::move best_red_move = board::move::null();
             board::move best_blue_move = board::move::null();
-            m_solver_red.m_bound = depth * 2000;
+            m_solver_red.m_bound = depth * 10000;
             m_solver_red.m_best_score = 1e9;
-            m_solver_blue.m_bound = depth * 2000;
+            m_solver_blue.m_bound = depth * 10000;
             m_solver_blue.m_best_score = 1e9;
 
             // use heuristic to find who is first
             //            int eval = evaluate();
             //            bool red_better = (eval > 0 && m_pos.m_turn == board::RED) || (eval < 0 && m_pos.m_turn == board::BLUE);
             // endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)
-            if (m_pos.crossed_gap().first <= m_pos.crossed_gap().second) {
+            // m_pos.crossed_gap().first <= m_pos.crossed_gap().second
+            if (endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)) {
                 results[0] = m_solver_red.search(m_pos, best_red_move);
-                m_searched += m_solver_red.m_counter;
                 if (results[0] == -1) {
                     return false;
                 }
@@ -487,13 +487,11 @@ namespace engine {
 
                 m_solver_blue.m_best_score = results[0];
                 results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                m_searched += m_solver_blue.m_counter;
                 if (results[1] == -1) {
                     return false;
                 }
             } else {
                 results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                m_searched += m_solver_blue.m_counter;
                 if (results[1] == -1) {
                     return false;
                 }
@@ -505,7 +503,6 @@ namespace engine {
 
                 m_solver_red.m_best_score = results[1];
                 results[0] = m_solver_red.search(m_pos, best_red_move);
-                m_searched += m_solver_red.m_counter;
                 if (results[0] == -1) {
                     return false;
                 }
@@ -575,18 +572,19 @@ namespace engine {
             if (should_use && !is_root) {
                 return tt_score;
             }
+
             //  && (m_pos.crossed_gap().first < 3 || m_pos.crossed_gap().second < 3)
-            if (m_pos.has_crossed() && depth > 6) {
-                int best_score = 0;
-                int turns = 0;
-                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-
-                if (ok) {
-                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
-
-                    return best_score;
-                }
-            }
+//            if (m_pos.has_crossed() && depth > 5) {
+//                int best_score = 0;
+//                int turns = 0;
+//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+//
+//                if (ok) {
+//                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
+//
+//                    return best_score;
+//                }
+//            }
 
             auto moves = m_pos.get_moves();
             auto scored_moves = score_moves(moves, tt_move, ply);
@@ -769,7 +767,7 @@ namespace engine {
                     std::chrono::milliseconds now = m_timer.now();
                     long delta = (now - last).count();
                     int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-                    printf("[info] depth %2d, nodes %10d, value %10s (%7d), nps %10d, ", depth, m_searched,
+                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, ", depth, m_searched, m_solver_red.m_counter + m_solver_blue.m_counter,
                            get_score(score).c_str(), score, nps);
 
                     printf("pv = [ ");
