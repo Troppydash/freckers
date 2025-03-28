@@ -1,3 +1,4 @@
+import math
 import os
 
 import torch
@@ -14,7 +15,7 @@ import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
-session = "session4"
+session = "session51"
 
 
 def bitmask_to_array(mask: int):
@@ -57,43 +58,6 @@ def make_inputs(position: tuple[int, int, int, int, int]):
         return out_blue + out_red
 
 
-class LazyFreckersDataset(Dataset):
-    def __init__(self):
-        self.mapping = []
-        for file in glob.glob('./sessions/*.pk'):
-            if file.endswith('_backup.pk'):
-                continue
-
-            if not (os.path.basename(file).startswith(session) or os.path.basename(file).startswith('session3')):
-                print(f'[dataset] skipping {os.path.basename(file)}')
-                continue
-
-            print(f'[dataset] loading {os.path.basename(file)}')
-
-            with open(file, 'rb') as f:
-                dataset = pickle.load(f)
-
-            for i in range(len(dataset.positions)):
-                self.mapping.append((dataset.positions[i], dataset.outcomes[i]))
-
-    def __len__(self):
-        return len(self.mapping)
-
-    def __getitem__(self, index):
-        positions, outcome = self.mapping[index]
-        x = make_inputs(positions)
-
-        if outcome == positions[3]:
-            score = 1
-        elif outcome == 1 - positions[3]:
-            score = 0
-        else:
-            score = 0.5
-        y = [score]
-
-        return torch.tensor(x, dtype=torch.float32).reshape(-1, input_size), torch.tensor(y, dtype=torch.float32)
-
-
 class FreckersDataset(Dataset):
     def __init__(self):
         X = []
@@ -103,13 +67,19 @@ class FreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not (os.path.basename(file).startswith(session) or os.path.basename(file).startswith('session3')):
+            if not (os.path.basename(file).startswith(session)):
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
 
-            with open(file, 'rb') as f:
-                dataset = pickle.load(f)
+            try:
+                with open(file, 'rb') as f:
+                    dataset = pickle.load(f)
+            except Exception as e:
+                print(f'skipping: {e}')
+                continue
+                # with open(file[:-3]+'_backup.pk', 'rb') as f:
+                #     dataset = pickle.load(f)
 
             for i in range(len(dataset.positions)):
                 positions = dataset.positions[i]
@@ -119,6 +89,8 @@ class FreckersDataset(Dataset):
                 blue = list(reversed(bitmask_to_array(positions[2])))
                 turn = positions[3]
                 moves = positions[4]
+                # eval should be for the moving player
+                eval = dataset.evals[i]
 
                 if turn == 0:
                     X.append([*lily, *red, *list(reversed(lily)), *blue])
@@ -132,10 +104,17 @@ class FreckersDataset(Dataset):
                 else:
                     score = 0
 
-                # scaler = 0.98 ** max(0, 70 - moves)
-                # norm = (score - 0.5) * 2 * scaler
-                # y.append([(norm + 1) / 2])
-                y.append([score])
+                # our score is in the perspective of the moving player
+
+                lambda_ = 0.7
+                if eval > 100000:
+                    normalized = 1
+                elif eval < -100000:
+                    normalized = -1
+                else:
+                    normalized = 2/(1+math.exp(-eval/1000)) - 1
+                avg = lambda_ * score + (1-lambda_) * normalized
+                y.append([avg])
 
                 # modes = dataset.positions[i][4]
                 # X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
@@ -165,9 +144,9 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8 * 8 * 2, 32, dtype=torch.float32)
-        self.layer2 = nn.Linear(64, 16, dtype=torch.float32)
-        self.layer3 = nn.Linear(16, 16, dtype=torch.float32)
+        self.layer1 = nn.Linear(8 * 8 * 2, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(128, 32, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
@@ -182,29 +161,11 @@ class FreckersNeuralNetwork(nn.Module):
         return x
 
 
-class SimpleNeuralNetwork(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.layer1 = nn.Linear(input_size, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(64, 32, dtype=torch.float32)
-        self.layer3 = nn.Linear(32, 32, dtype=torch.float32)
-        self.layer4 = nn.Linear(32, 1, dtype=torch.float32)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1)
-        x = F.relu(self.layer1(x)).clamp(max=1)
-        x = F.relu(self.layer2(x)).clamp(max=1)
-        x = F.relu(self.layer3(x)).clamp(max=1)
-        x = (self.layer4(x)).clamp(min=0, max=1)
-
-        return x
-
-
 def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.001, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.005, eps=1e-8)
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
     # )
@@ -214,10 +175,10 @@ def train(config):
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
     train_dataloader = DataLoader(
-        train_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=12
+        train_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=1
     )
     test_dataloader = DataLoader(
-        test_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=12
+        test_dataset, batch_size=int(config["batch_size"]), shuffle=True, num_workers=1
     )
 
     xs = []
@@ -237,7 +198,7 @@ def train(config):
             loss.backward()
             optimizer.step()
             for p in net.parameters():
-                p.data.clamp_(-1.0, 1.0)
+                p.data.clamp_(-2.0, 2.0)
 
             running_loss += loss.sum().item()
             epoch_steps += 1
@@ -282,8 +243,8 @@ if __name__ == '__main__':
     train(
         {
             "lr": 0.00004,
-            "batch_size": 4096 * 4,
-            "test_batch": 4096 * 8,
+            "batch_size": 4096 * 8,
+            "test_batch": 4096 * 16,
             "momentum": 0.9,
         }
     )

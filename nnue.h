@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace nnue {
-    int INT16_SCALE_BIT = 14;
+    int INT16_SCALE_BIT = 13;
     int32_t INT16_SCALE = (1 << INT16_SCALE_BIT);
 
     class layer {
@@ -36,7 +36,7 @@ namespace nnue {
             for (int i = 0; i < m_inputs * m_outputs; ++i) {
                 double tmp = 0.0;
                 file >> tmp;
-                m_weights.push_back(static_cast<int32_t>(round(std::min(1.0, std::max(-1.0, tmp)) * INT16_SCALE)));
+                m_weights.push_back(static_cast<int32_t>(round(std::min(2.0, std::max(-2.0, tmp)) * INT16_SCALE)));
             }
 
             for (int i = 0; i < m_outputs; ++i) {

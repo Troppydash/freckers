@@ -9,24 +9,24 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 300
+    ts = 500
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
     pos = Pos()
 
     # random moves
-    left = 5
+    left = 10
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
-        if random.random() < 0.5:
-            m, _ = engine1.play(game=pos, ts=ts, verbose=False)
-        else:
-            m, _ = engine2.play(game=pos, ts=ts, verbose=False)
-        pos.push(m)
+        # if random.random() < 0.5:
+        #     m, _ = engine1.play(game=pos, ts=ts, verbose=False)
         # else:
-        # moves = pos.get_moves()
-        # pos.push(random.choice(moves))
+        #     m, _ = engine2.play(game=pos, ts=ts, verbose=False)
+        # pos.push(m)
+        # else:
+        moves = pos.get_moves()
+        pos.push(random.choice(moves))
         left -= 1
 
     scores = [0, 0]
@@ -116,8 +116,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V32, agents.V4, agents.Latest]
-    names = [ "v32", "v4", "latest"]
+    agents = [agents.V32, agents.V4, agents.V5, agents.Latest]
+    names = [ "v32", "v4", "v5", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 
