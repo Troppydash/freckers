@@ -222,7 +222,7 @@ namespace board {
         static void from_mask(mask pos, mask start, std::vector<move> &out) {
             while (pos > 0) {
                 // get piece mask
-                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pos) - 1);
+                mask piece = 1ull << __builtin_ctzll(pos);
                 pos ^= piece;
 
                 out.push_back(move{bitboard::ALL, start, piece});
@@ -394,7 +394,7 @@ namespace board {
             while (pieces > 0) {
                 // get piece mask
                 // Get the shift value for the left most member
-                int i = (bitboard::ROWS * bitboard::COLS - 1) - __builtin_clzll(pieces);
+                int i = __builtin_ctzll(pieces);
 
                 // Get the current member
                 mask piece = 1ull << i;
@@ -506,7 +506,7 @@ namespace board {
             mask pieces = player;
             while (pieces > 0) {
                 // get piece mask
-                mask piece = 1ull << (bitboard::ROWS * bitboard::COLS - __builtin_clzll(pieces) - 1);
+                mask piece = 1ull << __builtin_ctzll(pieces);
                 pieces ^= piece;
 
                 // direct moves

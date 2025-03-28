@@ -7,6 +7,7 @@
 
 #include <cinttypes>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -14,7 +15,8 @@
 #include <vector>
 
 namespace nnue {
-    int32_t INT16_SCALE = (1 << 14) - 1;
+    int INT16_SCALE_BIT = 14;
+    int32_t INT16_SCALE = (1 << INT16_SCALE_BIT);
 
     class layer {
     public:
@@ -56,13 +58,19 @@ namespace nnue {
             }
 
             for (int j = 0; j < m_inputs; ++j) {
+                size_t offset = j * m_outputs;
                 for (int i = 0; i < m_outputs; ++i) {
-                    m_output[i] += m_weights[j * m_outputs + i] * x[j];
+                    m_output[i] += m_weights[offset + i] * x[j];
                 }
             }
 
             for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] = (m_output[i] / INT16_SCALE) + m_biases[i];
+                m_output[i] >>= INT16_SCALE_BIT;
+            }
+
+
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] += m_biases[i];
             }
 
             if (!m_accum) {
@@ -90,17 +98,26 @@ namespace nnue {
         layer m_red_accum;
         layer m_blue_accum;
         std::vector<layer> m_layers;
+        std::vector<int32_t> m_accum_output;
+
+        // caching
+        bool m_changed;
+        int m_last_flip;
 
 
         explicit seq(std::vector<std::string> &weights)
-            : m_red_accum{weights[0]}, m_blue_accum{weights[0]} {
+            : m_red_accum{weights[0]}, m_blue_accum{weights[0]}, m_accum_output(m_red_accum.m_outputs + m_blue_accum.m_outputs, 0) {
             m_red_accum.m_accum = true;
             m_blue_accum.m_accum = true;
 
             for (int i = 1; i < weights.size(); ++i) {
                 m_layers.push_back(layer{weights[i]});
             }
-            m_layers[m_layers.size()-1].m_accum = true;
+            m_layers[m_layers.size() - 1].m_accum = true;
+
+            m_changed = true;
+            m_last_flip = -1;
+            set_changed();
         }
 
         void init(std::vector<int32_t> &red, std::vector<int32_t> &blue) {
@@ -114,51 +131,75 @@ namespace nnue {
 
             m_red_accum.forward(red);
             m_blue_accum.forward(blue);
+            set_changed();
+        }
+
+
+        void set_changed() {
+            m_changed = true;
+            m_last_flip = -1;
+        }
+
+        void set_unchanged(int flip) {
+            m_changed = false;
+            m_last_flip = flip;
+        }
+
+        bool is_changed(int flip) {
+            return m_changed || m_last_flip != flip;
         }
 
         int compute(int flip) {
-            std::vector<int32_t> output;
-            if (flip) {
-                for (const int32_t &i: m_blue_accum.m_output) {
-                    output.push_back(std::max(0, std::min(i, INT16_SCALE)));
+            if (is_changed(flip)) {
+                size_t offset = m_red_accum.m_outputs;
+                if (flip) {
+                    for (int i = 0; i < m_blue_accum.m_outputs; ++i) {
+                        m_accum_output[i] = std::max(0, std::min(m_blue_accum.m_output[i], INT16_SCALE));
+                    }
+
+                    for (int i = 0; i < m_red_accum.m_outputs; ++i) {
+                        m_accum_output[offset+i] = std::max(0, std::min(m_red_accum.m_output[i], INT16_SCALE));
+                    }
+                } else {
+                    for (int i = 0; i < m_blue_accum.m_outputs; ++i) {
+                        m_accum_output[offset+i] = std::max(0, std::min(m_blue_accum.m_output[i], INT16_SCALE));
+                    }
+
+                    for (int i = 0; i < m_red_accum.m_outputs; ++i) {
+                        m_accum_output[i] = std::max(0, std::min(m_red_accum.m_output[i], INT16_SCALE));
+                    }
                 }
 
-                for (const int32_t &i: m_red_accum.m_output) {
-                    output.push_back(std::max(0, std::min(i, INT16_SCALE)));
-                }
-            } else {
-                for (const int32_t &i: m_red_accum.m_output) {
-                    output.push_back(std::max(0, std::min(i, INT16_SCALE)));
-                }
-                for (const int32_t &i: m_blue_accum.m_output) {
-                    output.push_back(std::max(0, std::min(i, INT16_SCALE)));
-                }
-            }
 
+                m_layers[0].forward(m_accum_output);
+                for (int i = 1; i < m_layers.size(); ++i) {
+                    m_layers[i].forward(m_layers[i - 1].m_output);
+                }
 
-            m_layers[0].forward(output);
-            for (int i = 1; i < m_layers.size(); ++i) {
-                m_layers[i].forward(m_layers[i - 1].m_output);
+                set_unchanged(flip);
             }
 
             int64_t eval = m_layers[m_layers.size() - 1].m_output[0];
-            return static_cast<int>(eval * 40 * 100 / INT16_SCALE);
-//            return std::max(-1.0, std::min(1.0, static_cast<double>(m_layers[m_layers.size() - 1].m_output[0]) / (double) INT16_SCALE));
+            return static_cast<int>((eval * 40 * 100) / INT16_SCALE);
         }
 
         void push_red(int idx) {
+            set_changed();
             m_red_accum.update_add(idx);
         }
 
         void pop_red(int idx) {
+            set_changed();
             m_red_accum.update_sub(idx);
         }
 
         void push_blue(int idx) {
+            set_changed();
             m_blue_accum.update_add(idx);
         }
 
         void pop_blue(int idx) {
+            set_changed();
             m_blue_accum.update_sub(idx);
         }
     };
