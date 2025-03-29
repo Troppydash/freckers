@@ -127,6 +127,7 @@ namespace engine {
         pos m_pos;
         timer m_timer;
         int m_searched;
+        int m_astar_searched;
 
         int m_history[2][64][64];
         int m_lmr[50][100];
@@ -138,7 +139,7 @@ namespace engine {
         endgame::a_star m_solver_blue;
 
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_nnue(weights),
+            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED, 0, 0), m_solver_blue(board::BLUE, 0, 0) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -464,10 +465,8 @@ namespace engine {
             int results[2] = {0, 0};
             board::move best_red_move = board::move::null();
             board::move best_blue_move = board::move::null();
-            m_solver_red.m_bound = depth * 10000;
-            m_solver_red.m_best_score = 1e9;
-            m_solver_blue.m_bound = depth * 10000;
-            m_solver_blue.m_best_score = 1e9;
+            m_solver_red.reset(depth);
+            m_solver_blue.reset(depth);
 
             // use heuristic to find who is first
             //            int eval = evaluate();
@@ -573,11 +572,12 @@ namespace engine {
                 return tt_score;
             }
 
-            //  && (m_pos.crossed_gap().first < 3 || m_pos.crossed_gap().second < 3)
-//            if (m_pos.has_crossed() && depth > 5) {
+            //              && (m_pos.crossed_gap().first < 3 || m_pos.crossed_gap().second < 3)
+//            if (m_pos.has_crossed() && depth > 4) {
 //                int best_score = 0;
 //                int turns = 0;
 //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
 //
 //                if (ok) {
 //                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
@@ -767,7 +767,7 @@ namespace engine {
                     std::chrono::milliseconds now = m_timer.now();
                     long delta = (now - last).count();
                     int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, ", depth, m_searched, m_solver_red.m_counter + m_solver_blue.m_counter,
+                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, ", depth, m_searched, m_astar_searched,
                            get_score(score).c_str(), score, nps);
 
                     printf("pv = [ ");

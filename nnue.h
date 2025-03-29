@@ -42,7 +42,7 @@ namespace nnue {
             for (int i = 0; i < m_outputs; ++i) {
                 double tmp = 0.0;
                 file >> tmp;
-                m_biases.push_back(static_cast<int32_t>(round(std::min(1.0, std::max(-1.0, tmp)) * INT16_SCALE)));
+                m_biases.push_back(static_cast<int32_t>(round(std::min(2.0, std::max(-2.0, tmp)) * INT16_SCALE)));
             }
 
             for (int i = 0; i < m_outputs; ++i) {

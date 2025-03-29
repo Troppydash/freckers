@@ -101,10 +101,16 @@ namespace endgame {
         int m_best_score;
         int m_counter;
 
-        std::unordered_map<node, int, node_hash> m_cache;
+        // stores (node => (moves to win, next move)
+        std::unordered_map<node, std::tuple<int, board::move>, node_hash> m_cache;
 
         explicit a_star(int side, int bound, int best_score) : m_side(side), m_bound(bound), m_best_score(best_score), m_counter(0), m_cache() {}
 
+        void reset(int depth) {
+            m_bound = depth - 2;
+            m_counter = 0;
+            m_best_score = 1e9;
+        }
 
         int search(const board::pos &pos, board::move &best_move) {
             std::priority_queue<node, std::vector<node>, std::greater<>> queue;
@@ -114,9 +120,20 @@ namespace endgame {
             node initial_node{m_side, 0, initial, board::move::null(), nullptr};
             queue.push(initial_node);
 
+            if (m_cache.contains(initial_node)) {
+                auto [depth, move] = m_cache[initial_node];
+                best_move = move;
+                return depth;
+            }
+
             std::unordered_set<node, node_hash> visited;
             while (!queue.empty()) {
                 m_counter += 1;
+                // fail safe
+                if (m_counter > 1e6) {
+                    return -1;
+                }
+
                 node top = queue.top();
                 queue.pop();
 
@@ -130,7 +147,7 @@ namespace endgame {
                     return 1e9;
                 }
 
-                if (m_counter >= m_bound) {
+                if (top.depth > m_bound) {
                     return -1;
                 }
 
@@ -146,11 +163,16 @@ namespace endgame {
                     int depth = top.depth;
 
                     node &current = top;
-//                    int to_end = 0;
+                    node &prev = top;
+
+                    int to_end = 0;
                     while (current.depth > 1) {
                         current = *current.parent;
-//                        to_end += 1;
-//                        m_cache[current] = to_end;
+
+                        to_end += 1;
+                        m_cache[current] = {to_end, prev.move};
+
+                        prev = current;
                     }
                     best_move = current.move;
                     return depth;
@@ -169,9 +191,6 @@ namespace endgame {
                     new_pos.push(move);
                     new_pos.m_turn = m_side;
                     node new_node = {m_side, top.depth + 1, new_pos, move, parent};
-//                    if (m_cache.contains(new_node)) {
-//                        new_node.eval = m_cache[new_node];
-//                    }
                     queue.push(new_node);
                 }
             }

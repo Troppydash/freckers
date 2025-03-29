@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 400
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -62,9 +62,9 @@ def play(x):
 
 def round(agents, elos, names):
     n = len(agents)
-    k = 30
+    k = 34
 
-    with multiprocessing.Pool(12) as p:
+    with multiprocessing.Pool(10) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -78,8 +78,8 @@ def round(agents, elos, names):
         # update result
         probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
         probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
-        elos[names[i]].append(elos[names[i]][-1] + k * (scores[0] / 2 - probi))
-        elos[names[j]].append(elos[names[j]][-1] + k * (scores[1] / 2 - probj))
+        elos[names[i]].append(max(400, elos[names[i]][-1] + k * (scores[0] / 2 - probi)))
+        elos[names[j]].append(max(400, elos[names[j]][-1] + k * (scores[1] / 2 - probj)))
 
 
 def save_elos(elos):
@@ -108,16 +108,19 @@ def plot_elos(elos):
     for key, value in elos.items():
         ax.plot(list(range(len(value))), value, label=key)
 
-    ax.set_xlim([len(elos[key]) - 100, len(elos[key])])
-    fig.legend(loc='lower right')
+    ax.set_xlim([len(elos[key]) - 300, len(elos[key])])
+    fig.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     ax.grid()
     fig.savefig("elos.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    agents = [agents.V32, agents.V4, agents.V5, agents.Latest]
-    names = [ "v32", "v4", "v5", "latest"]
+    agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V6, agents.Latest]
+    names = ["v0", "v1", "v2", "v32", "v4", "v5", "v6", "latest"]
+
+    # agents = [ agents.V4, agents.V5, agents.V6, agents.Latest]
+    # names = ["v4", "v5", "v6", "latest"]
     elos = load_elos(names)
     plot_elos(elos)
 

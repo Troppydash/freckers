@@ -10,12 +10,13 @@ from torch.utils.data import DataLoader, random_split
 from torch.utils.data import Dataset
 import glob
 import pickle
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
-session = "session51"
+pk_file = "session51"
+session = "session52"
 
 
 def bitmask_to_array(mask: int):
@@ -67,7 +68,7 @@ class FreckersDataset(Dataset):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not (os.path.basename(file).startswith(session)):
+            if not (os.path.basename(file).startswith(pk_file)):
                 continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
@@ -78,8 +79,6 @@ class FreckersDataset(Dataset):
             except Exception as e:
                 print(f'skipping: {e}')
                 continue
-                # with open(file[:-3]+'_backup.pk', 'rb') as f:
-                #     dataset = pickle.load(f)
 
             for i in range(len(dataset.positions)):
                 positions = dataset.positions[i]
@@ -106,30 +105,15 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.7
+                lambda_ = 0.8
                 if eval > 100000:
                     normalized = 1
                 elif eval < -100000:
                     normalized = -1
                 else:
-                    normalized = 2/(1+math.exp(-eval/1000)) - 1
-                avg = lambda_ * score + (1-lambda_) * normalized
+                    normalized = 2 / (1 + math.exp(-eval / 1000)) - 1
+                avg = lambda_ * score + (1 - lambda_) * normalized
                 y.append([avg])
-
-                # modes = dataset.positions[i][4]
-                # X.append([*bitmask_to_array(dataset.positions[i][0]), *bitmask_to_array(dataset.positions[i][1]), *bitmask_to_array(dataset.positions[i][2])])
-                #
-                # outcome = dataset.outcomes[i]
-                # score = 0.5
-                # if outcome == 0:
-                #     score = 1
-                # elif outcome == 1:
-                #     score = 0
-                #
-                # scaler = 0.99 ** max(0, 60 - modes)
-                # norm = (score - 0.5) * 2 * scaler
-                # y.append([(norm + 1) / 2])
-                # y.append([score])
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
         self.y = torch.tensor(y, dtype=torch.float32)
@@ -146,8 +130,8 @@ class FreckersNeuralNetwork(nn.Module):
         super().__init__()
         self.layer1 = nn.Linear(8 * 8 * 2, 64, dtype=torch.float32)
         self.layer2 = nn.Linear(128, 32, dtype=torch.float32)
-        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
-        self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 32, dtype=torch.float32)
+        self.layer4 = nn.Linear(32, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -165,7 +149,8 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.005, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.003, eps=1e-8)
+    scheduler = ReduceLROnPlateau(optimizer, 'min')
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
     # )
@@ -228,12 +213,17 @@ def train(config):
         fig.savefig(f"loss/{session}_loss.png", bbox_inches="tight")
         plt.close(fig)
 
-        if epoch % 10 == 0:
+        if epoch % 5 == 0:
             torch.save(net.state_dict(), f"./models/{session}/model_{epoch}.pt")
 
         print(
             f"[train] train_loss {running_loss / epoch_steps:.4}, test_loss {test_loss / test_steps:.4}"
         )
+
+        # scheduler.step(test_loss / test_steps)
+        # print(f"new lr {scheduler.get_last_lr()}")
+
+
 
 
 # used to be 64, 32, 16, with all positions
