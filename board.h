@@ -363,21 +363,54 @@ namespace board {
         }
 
         bool has_jumps() const {
-            return !get_jump_moves().empty();
-            // TODO: fix this so that it detects any series of forward jumps not just immediate
-            mask new_jumps = 0;
-            // Get all the frogs on the board
-            mask obst = m_players[0] | m_players[1];
+            mask player = m_players[m_turn];
+            mask pieces = player;
+            while (pieces > 0) {
+                int i = __builtin_ctzll(pieces);
 
-            if (m_turn == RED) {
-                new_jumps = bitboard::jump_down_forward(m_players[m_turn], obst);
-            } else {
-                new_jumps = bitboard::jump_up_forward(m_players[m_turn], obst);
+                mask piece = 1ull << i;
+
+                pieces ^= piece;
+
+                // jumps
+                // Get all the frogs on the board
+                mask obst = m_players[0] | m_players[1];
+
+                mask all_jumps = piece;
+                mask next_jumps = piece;
+
+                while (next_jumps > 0) {
+                    // broadcast
+                    mask new_jumps = 0;
+                    // If the red team's turn
+                    if (m_turn == RED) {
+                        // Get the downward jump
+                        new_jumps = bitboard::jump_down(next_jumps, obst);
+                    } else {
+                        // Get the upward jump
+                        new_jumps = bitboard::jump_up(next_jumps, obst);
+                    }
+
+                    new_jumps &= m_lilypads & (~obst);
+                    next_jumps = new_jumps & (~all_jumps);
+                    all_jumps |= new_jumps;
+                }
+
+                int row = i / bitboard::COLS;
+
+                all_jumps ^= piece;
+                all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
+                if (m_turn == board::RED) {
+                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
+                } else {
+                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
+                }
+                if (all_jumps > 0) {
+                    return true;
+                }
             }
 
-
-            new_jumps &= m_lilypads & (~obst);
-            return new_jumps > 0;
+            return false;
         }
 
         //??
