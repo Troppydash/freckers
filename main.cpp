@@ -214,8 +214,8 @@ void test_a_star_position() {
 
 
 int main() {
-    test_position();
-    return 0;
+//    test_position();
+//    return 0;
 
     board::pos pos;
 

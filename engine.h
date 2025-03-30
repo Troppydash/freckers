@@ -503,6 +503,11 @@ namespace engine {
                 }
             }
 
+            m_timer.check();
+            if (m_timer.m_is_stopped) {
+                return false;
+            }
+
             if (m_pos.m_turn == board::RED) {
                 pv_line.push_back(best_red_move);
             } else {
@@ -697,8 +702,8 @@ namespace engine {
             return std::to_string((double) score / 100);
         }
 
-        std::pair<std::vector<int>, std::vector<int>> pos_init() {
-            std::vector<int> red;
+        std::pair<std::vector<int16_t>, std::vector<int16_t>> init_nnue() {
+            std::vector<int16_t> red;
             for (int i = 0; i < 64; ++i) {
                 if (m_pos.m_lilypads & (1ull << i)) {
                     red.push_back(1);
@@ -715,7 +720,7 @@ namespace engine {
                 }
             }
 
-            std::vector<int> blue;
+            std::vector<int16_t> blue;
             for (int i = 0; i < 64; ++i) {
                 if (m_pos.m_lilypads & (1ull << (63 - i))) {
                     blue.push_back(1);
@@ -747,7 +752,7 @@ namespace engine {
             std::chrono::milliseconds last = m_timer.now();
             int last_searched = m_searched;
 
-            auto [red, blue] = pos_init();
+            auto [red, blue] = init_nnue();
             m_nnue.init(red, blue);
 
             while (depth <= param::max_depth) {

@@ -13,6 +13,7 @@ endif ()
 #        main.cpp
 #        board.h
 #        param.h
+#        nnue.h
 #        engine.h
 #        colors.h
 #        endgame.h)
@@ -23,6 +24,7 @@ add_executable(frecker main.cpp
         param.h
         engine.h
         colors.h
+        nnue.h
         endgame.h
 )
 ##target_link_libraries(frecker-bin frecker)
