@@ -14,7 +14,6 @@
 #include <utility>
 
 namespace endgame {
-
     int heuristic_one(board::pos &pos, int side, board::mask piece) {
         if (piece & board::bitboard::ENDS[side]) {
             return 0;
@@ -25,6 +24,14 @@ namespace endgame {
                 return 1;
             }
         }
+
+//        if (side == board::RED) {
+//            int row = __builtin_ctzll(piece) / 8;
+//            board::mask mask = board::bitboard::ALL << (8 * (row + 1));
+//            if ((pos.m_players[side] & mask) == 0) {
+//                return std::max(2, 7-row);
+//            }
+//        }
 
         return 2;
     }
@@ -38,6 +45,7 @@ namespace endgame {
 
             total += heuristic_one(pos, side, piece);
         }
+
         return total;
     }
 
@@ -83,10 +91,10 @@ namespace endgame {
 
             board::mask all;
             if (node.side == board::RED) {
-                int row = __builtin_clzll(mask) / 8;
+                int row = __builtin_ctzll(mask) / 8;
                 all = board::bitboard::ALL << (8 * row);
             } else {
-                int row = 63 - __builtin_clzll(mask) / 8;
+                int row = 7 - (63 - __builtin_clzll(mask)) / 8;
                 all = board::bitboard::ALL >> (8 * row);
             }
             return cantor(node.pos.m_lilypads & all, mask & all);
@@ -96,20 +104,27 @@ namespace endgame {
 
     class a_star {
     public:
+        // side we are performing a* on
         int m_side;
-        int m_bound;
-        int m_best_score;
+        // maximum depth to search
+        int m_depth_bound;
+        // best depth by opponent, don't search after that
+        int m_best_depth;
+        // number of nodes searched
         int m_counter;
 
         // stores (node => (moves to win, next move)
         std::unordered_map<node, std::tuple<int, board::move>, node_hash> m_cache;
 
-        explicit a_star(int side, int bound, int best_score) : m_side(side), m_bound(bound), m_best_score(best_score), m_counter(0), m_cache() {}
+        explicit a_star(int side) : m_side(side), m_depth_bound(0), m_best_depth(150), m_counter(0), m_cache() {}
 
         void reset(int depth) {
-            m_bound = depth - 2;
+            // reset best_depth by opp to inf
+            m_best_depth = 150;
+            // limit depth searched to depth
+            m_depth_bound = depth - 4;
+            // reset counter
             m_counter = 0;
-            m_best_score = 1e9;
         }
 
         int search(const board::pos &pos, board::move &best_move) {
@@ -118,19 +133,16 @@ namespace endgame {
             board::pos initial = pos;
             initial.m_turn = m_side;
             node initial_node{m_side, 0, initial, board::move::null(), nullptr};
-            queue.push(initial_node);
 
-            if (m_cache.contains(initial_node)) {
-                auto [depth, move] = m_cache[initial_node];
-                best_move = move;
-                return depth;
-            }
+            queue.push(initial_node);
 
             std::unordered_set<node, node_hash> visited;
             while (!queue.empty()) {
                 m_counter += 1;
-                // fail safe
-                if (m_counter > 1e6) {
+
+                // failsafe for infinite loop
+                if (m_counter > 1e9) {
+                    std::cout << "failsafe\n";
                     return -1;
                 }
 
@@ -142,47 +154,40 @@ namespace endgame {
                 }
                 visited.insert(top);
 
-                if (top.depth >= m_best_score + 1) {
-                    // early prune
-                    return 1e9;
-                }
-
-                if (top.depth > m_bound) {
-                    return -1;
-                }
-
                 top.pos.m_turn = 1 - m_side;
+                // error for draws
                 if (top.pos.get_state() == board::DRAW) {
-                    // error for draws
+                    top.pos.m_turn = m_side;
                     return -1;
                 }
 
+                // handle wins
                 if (top.pos.get_state() == m_side) {
                     top.pos.m_turn = m_side;
 
                     int depth = top.depth;
 
                     node &current = top;
-                    node &prev = top;
-
-                    int to_end = 0;
                     while (current.depth > 1) {
                         current = *current.parent;
-
-                        to_end += 1;
-                        m_cache[current] = {to_end, prev.move};
-
-                        prev = current;
                     }
                     best_move = current.move;
                     return depth;
                 }
                 top.pos.m_turn = m_side;
 
-                // create shared ptr
-                std::shared_ptr<node> parent = std::make_shared<node>(top);
+                // early prune, if we can't find a score that is better than opp
+                if (top.depth > m_best_depth) {
+                    return 150;
+                }
+
+                // exceeded bounds, return error
+                if (top.depth > m_depth_bound) {
+                    return -1;
+                }
 
                 // visit all moves
+                std::shared_ptr<node> parent = std::make_shared<node>(top);
                 for (auto move: top.pos.get_moves()) {
                     if (move.is_grow() && move.m_grow == 0) {
                         continue;

@@ -140,7 +140,7 @@ namespace engine {
 
         explicit computer(pos pos, std::vector<std::string> weights)
             : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
-              m_solver_red(board::RED, 0, 0), m_solver_blue(board::BLUE, 0, 0) {
+              m_solver_red(board::RED), m_solver_blue(board::BLUE) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
@@ -469,10 +469,6 @@ namespace engine {
             m_solver_blue.reset(depth);
 
             // use heuristic to find who is first
-            //            int eval = evaluate();
-            //            bool red_better = (eval > 0 && m_pos.m_turn == board::RED) || (eval < 0 && m_pos.m_turn == board::BLUE);
-            // endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)
-            // m_pos.crossed_gap().first <= m_pos.crossed_gap().second
             if (endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)) {
                 results[0] = m_solver_red.search(m_pos, best_red_move);
                 if (results[0] == -1) {
@@ -484,7 +480,7 @@ namespace engine {
                     return false;
                 }
 
-                m_solver_blue.m_best_score = results[0];
+                m_solver_blue.m_best_depth = results[0];
                 results[1] = m_solver_blue.search(m_pos, best_blue_move);
                 if (results[1] == -1) {
                     return false;
@@ -500,7 +496,7 @@ namespace engine {
                     return false;
                 }
 
-                m_solver_red.m_best_score = results[1];
+                m_solver_red.m_best_depth = results[1];
                 results[0] = m_solver_red.search(m_pos, best_red_move);
                 if (results[0] == -1) {
                     return false;
@@ -572,19 +568,18 @@ namespace engine {
                 return tt_score;
             }
 
-            //              && (m_pos.crossed_gap().first < 3 || m_pos.crossed_gap().second < 3)
-//            if (m_pos.has_crossed() && depth > 4) {
-//                int best_score = 0;
-//                int turns = 0;
-//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-//
-//                if (ok) {
-//                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
-//
-//                    return best_score;
-//                }
-//            }
+            if (!is_pv_node && m_pos.has_crossed() && depth >= 5) {
+                int best_score = 0;
+                int turns = 0;
+                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+
+                if (ok) {
+                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
+
+                    return best_score;
+                }
+            }
 
 
             // null move pruning
@@ -781,29 +776,11 @@ namespace engine {
                 }
 
                 if (m_timer.m_is_stopped) {
-                    // TODO: also account for asp window
-                    //                    if (best_move.is_null() && depth == 1) {
-                    //                        best_move = pv_line[0];
-                    //                    }
                     break;
                 }
-
-                //                if (score <= alpha || score >= beta) {
-                //                    alpha = -param::inf;
-                //                    beta = param::inf;
-                //                    continue;
-                //                }
-
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
-
-                //                if (depth <= 0) {
-                //                    int gap = 5 * 100;
-                //                    alpha = score - gap;
-                //                    beta = score + gap;
-                //                }
-
                 depth += 1;
             }
 

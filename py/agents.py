@@ -106,3 +106,6 @@ class Latest(Engine):
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, '../')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
+    def play(self, game: Pos, ts: int, verbose: bool) -> tuple[Move, int]:
+        return super().play(game, ts, verbose)

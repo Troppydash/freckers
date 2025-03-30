@@ -203,7 +203,7 @@ void test_a_star_position() {
         std::cout << "[board]\n"
                   << pos.display() << "\n";
 
-        endgame::a_star engine{board::BLUE, 0, 0};
+        endgame::a_star engine{board::BLUE};
         board::move best_move;
         int result = engine.search(pos, best_move);
         std::cout << "[search] " << result << "\n";
