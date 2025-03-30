@@ -586,8 +586,6 @@ namespace engine {
 //                }
 //            }
 
-            auto moves = m_pos.get_moves();
-            auto scored_moves = score_moves(moves, tt_move, ply);
 
             // null move pruning
             if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
@@ -608,6 +606,8 @@ namespace engine {
                 }
             }
 
+            auto moves = m_pos.get_moves();
+            auto scored_moves = score_moves(moves, tt_move, ply);
 
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
