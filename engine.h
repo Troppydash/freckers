@@ -506,11 +506,12 @@ namespace engine {
                 return false;
             }
 
-            if (m_pos.m_turn == board::RED) {
-                pv_line.push_back(best_red_move);
-            } else {
-                pv_line.push_back(best_blue_move);
-            }
+            // todo: this might push_back null
+//            if (m_pos.m_turn == board::RED) {
+//                pv_line.push_back(best_red_move);
+//            } else {
+//                pv_line.push_back(best_blue_move);
+//            }
 
             if (m_pos.m_turn == board::RED) {
                 if (results[board::BLUE] < results[board::RED]) {
@@ -571,18 +572,19 @@ namespace engine {
                 return tt_score;
             }
 
-            //            if (!is_pv_node && m_pos.has_crossed() && depth >= 5) {
-            //                int best_score = 0;
-            //                int turns = 0;
-            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-            //
-            //                if (ok) {
-            //                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
-            //
-            //                    return best_score;
-            //                }
-            //            }
+//            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 5) {
+//                int best_score = 0;
+//                int turns = 0;
+//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+//
+//                if (ok) {
+//                    move null = move::null();
+//                    entry.set(m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
+//
+//                    return best_score;
+//                }
+//            }
 
 
             // null move pruning
