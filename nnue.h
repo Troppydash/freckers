@@ -5,6 +5,7 @@
 #ifndef FRECKERS_NNUE_H
 #define FRECKERS_NNUE_H
 
+#include "aligned.h"
 #include <cinttypes>
 #include <cmath>
 #include <cstring>
@@ -16,7 +17,7 @@
 #include <vector>
 
 namespace nnue {
-    constexpr int16_t WEIGHT8_SCALE = static_cast<int8_t>(1 << 6);
+    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>(1 << 6);
     constexpr int16_t WEIGHT16_SCALE = static_cast<int16_t>(1 << 12);
     constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
@@ -24,25 +25,20 @@ namespace nnue {
         return static_cast<int16_t>(std::max(WEIGHT_ZERO, std::min(WEIGHT16_SCALE, x)) >> 6);
     }
 
+    template<typename T, std::size_t ALIGNMENT_IN_BYTES = 64>
+    using AlignedVector = std::vector<T, AlignedAllocator<T, ALIGNMENT_IN_BYTES>>;
+
+
     class layer {
     public:
         // accumulator specifics
         bool m_accum;
 
-        int8_t *m_weights;
-        int16_t *m_biases;
-        int16_t *m_output;
+        AlignedVector<int16_t> m_weights;
+        AlignedVector<int16_t> m_biases;
+        AlignedVector<int16_t> m_output;
         uint64_t m_inputs;
         uint64_t m_outputs;
-
-        layer() {
-            m_accum = false;
-            m_weights = nullptr;
-            m_biases = nullptr;
-            m_output = nullptr;
-            m_inputs = 0;
-            m_outputs = 0;
-        }
 
         explicit layer(std::string &weights) {
             std::ifstream file(weights);
@@ -50,46 +46,26 @@ namespace nnue {
             m_outputs = 0;
             file >> m_inputs >> m_outputs;
 
-            m_weights = new int8_t[m_inputs * m_outputs];
             for (int i = 0; i < m_inputs * m_outputs; ++i) {
                 double tmp = 0.0;
                 file >> tmp;
-                m_weights[i] = static_cast<int8_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE));
+                m_weights.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
             }
 
-            m_biases = new int16_t[m_outputs];
             for (int i = 0; i < m_outputs; ++i) {
                 double tmp = 0.0;
                 file >> tmp;
-                m_biases[i] = static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT16_SCALE));
+                m_biases.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT16_SCALE)));
             }
 
-            m_output = new int16_t[m_outputs];
             for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] = 0;
+                m_output.push_back(0);
             }
 
             m_accum = false;
         }
 
-        ~layer() {
-            delete[] m_weights;
-            delete[] m_biases;
-            delete[] m_output;
-        }
-
-        layer(const layer &other)
-            : m_accum(other.m_accum), m_inputs(other.m_inputs), m_outputs(other.m_outputs) {
-            m_weights = new int8_t[m_inputs * m_outputs];
-            std::copy(other.m_weights, other.m_weights + m_inputs * m_outputs, m_weights);
-            m_biases = new int16_t[m_outputs];
-            std::copy(other.m_biases, other.m_biases + m_outputs, m_biases);
-            m_output = new int16_t[m_outputs];
-            std::copy(other.m_output, other.m_output + m_outputs, m_output);
-        };
-
-
-        void forward(const int16_t *x) {
+        void forward(AlignedVector<int16_t> &x) {
             {
                 //                for (int i = 0; i < m_outputs; ++i) {
                 //                    m_output[i] = 0;
@@ -97,7 +73,7 @@ namespace nnue {
                 int i = 0;
                 __m256i zero_vec = _mm256_setzero_si256();
                 for (; i + 16 <= m_outputs; i += 16) {
-                    _mm256_store_si256(reinterpret_cast<__m256i *>(m_output + i), zero_vec);
+                    _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i), zero_vec);
                 }
                 for (; i < m_outputs; ++i) {
                     m_output[i] = 0;
@@ -105,26 +81,48 @@ namespace nnue {
             }
 
 
-            for (int j = 0; j < m_inputs; ++j) {
-                size_t offset = j * m_outputs;
-                {
-                    for (int i = 0; i < m_outputs; ++i) {
+            {
+                //            for (int j = 0; j < m_inputs; ++j) {
+                //                size_t offset = j * m_outputs;
+                //                for (int i = 0; i < m_outputs; ++i) {
+                //                    m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
+                //                }
+                //            }
+                //
+
+                for (int j = 0; j < m_inputs; ++j) {
+                    size_t offset = j * m_outputs;
+                    __m256i x_j = _mm256_set1_epi16(x[j]);
+
+                    int i = 0;
+                    for (; i + 16 <= m_outputs; i += 16) {
+                        __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + offset + i));
+                        weights = _mm256_mullo_epi16(weights, x_j);
+
+                        __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                                                          weights);
+                        _mm256_store_si256(
+                                reinterpret_cast<__m256i *>(m_output.data() + i),
+                                result);
+                    }
+                    for (; i < m_outputs; ++i) {
                         m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
                     }
                 }
             }
 
-            {
-                //                for (int i = 0; i < m_outputs; ++i) {
-                //                    m_output[i] += m_biases[i];
-                //                }
 
+            {
+                // for (int i = 0; i < m_outputs; ++i) {
+                //     m_output[i] += m_biases[i];
+                // }
                 int i = 0;
                 for (; i + 16 <= m_outputs; i += 16) {
-                    _mm256_storeu_si256(
-                            reinterpret_cast<__m256i *>(m_output + i),
-                            _mm256_add_epi16(_mm256_loadu_si256(reinterpret_cast<__m256i *>(m_output + i)),
-                                             _mm256_loadu_si256(reinterpret_cast<__m256i *>(m_biases + i))));
+                    __m256i result = _mm256_adds_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                                                       _mm256_load_si256(reinterpret_cast<__m256i *>(m_biases.data() + i)));
+                    _mm256_store_si256(
+                            reinterpret_cast<__m256i *>(m_output.data() + i),
+                            result);
                 }
 
                 for (; i < m_outputs; ++i) {
@@ -134,21 +132,76 @@ namespace nnue {
 
 
             if (!m_accum) {
-                for (int i = 0; i < m_outputs; ++i) {
+                //                for (int i = 0; i < m_outputs; ++i) {
+                //                    m_output[i] = clipped_relu(m_output[i]);
+                //                }
+
+                __m256i zero = _mm256_set1_epi16(WEIGHT_ZERO);
+                __m256i upper = _mm256_set1_epi16(WEIGHT16_SCALE);
+
+                int i = 0;
+                for (; i + 16 <= m_outputs; i += 16) {
+                    __m256i result = _mm256_min_epi16(
+                            _mm256_max_epi16(
+                                    _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                                    zero),
+                            upper);
+
+                    result = _mm256_srli_epi16(result, 6);
+                    _mm256_store_si256(
+                            reinterpret_cast<__m256i *>(m_output.data() + i),
+                            result);
+                }
+
+                for (; i < m_outputs; ++i) {
                     m_output[i] = clipped_relu(m_output[i]);
                 }
             }
         }
 
         void update_add(int idx) {
-            for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            //            for (int i = 0; i < m_outputs; ++i) {
+            //                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            //            }
+
+            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
+            int i = 0;
+            for (; i + 16 <= m_outputs; i += 16) {
+                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
+                weights = _mm256_mullo_epi16(weights, scalar);
+
+                __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                                                  weights);
+
+                _mm256_store_si256(
+                        reinterpret_cast<__m256i *>(m_output.data() + i),
+                        result);
+            }
+            for (; i < m_outputs; ++i) {
+                m_output[i] += m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
             }
         }
 
         void update_sub(int idx) {
-            for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            //            for (int i = 0; i < m_outputs; ++i) {
+            //                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            //            }
+
+            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
+            int i = 0;
+            for (; i + 16 <= m_outputs; i += 16) {
+                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
+                weights = _mm256_mullo_epi16(weights, scalar);
+
+                __m256i result = _mm256_sub_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                                                  weights);
+
+                _mm256_store_si256(
+                        reinterpret_cast<__m256i *>(m_output.data() + i),
+                        result);
+            }
+            for (; i < m_outputs; ++i) {
+                m_output[i] -= m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
             }
         }
     };
@@ -158,7 +211,7 @@ namespace nnue {
         layer m_red_accum;
         layer m_blue_accum;
         std::vector<layer> m_layers;
-        std::vector<int16_t> m_accum_output;
+        AlignedVector<int16_t> m_accum_output;
 
         // caching
         bool m_changed;
@@ -171,8 +224,7 @@ namespace nnue {
             m_blue_accum.m_accum = true;
 
             for (int i = 1; i < weights.size(); ++i) {
-                //                m_layers[i-1] = layer{weights[i]};
-                m_layers.push_back(layer{weights[i]});
+                m_layers.emplace_back(weights[i]);
             }
             m_layers[m_layers.size() - 1].m_accum = true;
 
@@ -190,8 +242,10 @@ namespace nnue {
                 i *= WEIGHT8_SCALE;
             }
 
-            m_red_accum.forward(red.data());
-            m_blue_accum.forward(blue.data());
+            AlignedVector<int16_t> aligned_red(red.begin(), red.end());
+            AlignedVector<int16_t> aligned_blue(blue.begin(), blue.end());
+            m_red_accum.forward(aligned_red);
+            m_blue_accum.forward(aligned_blue);
             set_changed();
         }
 
@@ -232,7 +286,7 @@ namespace nnue {
                 }
 
 
-                m_layers[0].forward(m_accum_output.data());
+                m_layers[0].forward(m_accum_output);
                 for (int i = 1; i < m_layers.size(); ++i) {
                     m_layers[i].forward(m_layers[i - 1].m_output);
                 }

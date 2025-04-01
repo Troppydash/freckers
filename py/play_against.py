@@ -46,7 +46,6 @@ def play_against(player_turn, agent_class, ts):
             board.push(move)
 
 
-
 def play_engines(engine1, engine2, ts):
     engine1: engine.Engine = engine1()
     engine2: engine.Engine = engine2()
@@ -64,7 +63,19 @@ def play_engines(engine1, engine2, ts):
             board.push(move)
 
 
-
 if __name__ == '__main__':
     # play_against(engine.Pos.RED, agents.Latest, 5000)
     play_engines(agents.V0, agents.Latest, 5000)
+
+
+class Test:
+    a: int
+
+    def test(self) -> int:
+        return self.a
+
+
+t = Test()
+t.test()  # Test.test(t)
+l = [Test.test]
+

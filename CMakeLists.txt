@@ -26,6 +26,7 @@ add_executable(frecker main.cpp
         colors.h
         nnue.h
         endgame.h
+        aligned.h
 )
 ##target_link_libraries(frecker-bin frecker)
 # use RUNTIME_OUTPUT_NAME on MSVC
