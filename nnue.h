@@ -67,142 +67,142 @@ namespace nnue {
 
         void forward(AlignedVector<int16_t> &x) {
             {
-                //                for (int i = 0; i < m_outputs; ++i) {
-                //                    m_output[i] = 0;
-                //                }
-                int i = 0;
-                __m256i zero_vec = _mm256_setzero_si256();
-                for (; i + 16 <= m_outputs; i += 16) {
-                    _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i), zero_vec);
-                }
-                for (; i < m_outputs; ++i) {
+                for (int i = 0; i < m_outputs; ++i) {
                     m_output[i] = 0;
                 }
+                //                int i = 0;
+                //                __m256i zero_vec = _mm256_setzero_si256();
+                //                for (; i + 16 <= m_outputs; i += 16) {
+                //                    _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i), zero_vec);
+                //                }
+                //                for (; i < m_outputs; ++i) {
+                //                    m_output[i] = 0;
+                //                }
             }
 
 
             {
-                //            for (int j = 0; j < m_inputs; ++j) {
-                //                size_t offset = j * m_outputs;
-                //                for (int i = 0; i < m_outputs; ++i) {
-                //                    m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
-                //                }
-                //            }
-                //
-
                 for (int j = 0; j < m_inputs; ++j) {
                     size_t offset = j * m_outputs;
-                    __m256i x_j = _mm256_set1_epi16(x[j]);
-
-                    int i = 0;
-                    for (; i + 16 <= m_outputs; i += 16) {
-                        __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + offset + i));
-                        weights = _mm256_mullo_epi16(weights, x_j);
-
-                        __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
-                                                          weights);
-                        _mm256_store_si256(
-                                reinterpret_cast<__m256i *>(m_output.data() + i),
-                                result);
-                    }
-                    for (; i < m_outputs; ++i) {
+                    for (int i = 0; i < m_outputs; ++i) {
                         m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
                     }
                 }
+
+
+                //                for (int j = 0; j < m_inputs; ++j) {
+                //                    size_t offset = j * m_outputs;
+                //                    __m256i x_j = _mm256_set1_epi16(x[j]);
+                //
+                //                    int i = 0;
+                //                    for (; i + 16 <= m_outputs; i += 16) {
+                //                        __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + offset + i));
+                //                        weights = _mm256_mullo_epi16(weights, x_j);
+                //
+                //                        __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                //                                                          weights);
+                //                        _mm256_store_si256(
+                //                                reinterpret_cast<__m256i *>(m_output.data() + i),
+                //                                result);
+                //                    }
+                //                    for (; i < m_outputs; ++i) {
+                //                        m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
+                //                    }
+                //                }
             }
 
 
             {
-                // for (int i = 0; i < m_outputs; ++i) {
-                //     m_output[i] += m_biases[i];
-                // }
-                int i = 0;
-                for (; i + 16 <= m_outputs; i += 16) {
-                    __m256i result = _mm256_adds_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
-                                                       _mm256_load_si256(reinterpret_cast<__m256i *>(m_biases.data() + i)));
-                    _mm256_store_si256(
-                            reinterpret_cast<__m256i *>(m_output.data() + i),
-                            result);
-                }
-
-                for (; i < m_outputs; ++i) {
+                for (int i = 0; i < m_outputs; ++i) {
                     m_output[i] += m_biases[i];
                 }
+                //                int i = 0;
+                //                for (; i + 16 <= m_outputs; i += 16) {
+                //                    __m256i result = _mm256_adds_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                //                                                       _mm256_load_si256(reinterpret_cast<__m256i *>(m_biases.data() + i)));
+                //                    _mm256_store_si256(
+                //                            reinterpret_cast<__m256i *>(m_output.data() + i),
+                //                            result);
+                //                }
+                //
+                //                for (; i < m_outputs; ++i) {
+                //                    m_output[i] += m_biases[i];
+                //                }
             }
 
 
             if (!m_accum) {
-                //                for (int i = 0; i < m_outputs; ++i) {
-                //                    m_output[i] = clipped_relu(m_output[i]);
-                //                }
-
-                __m256i zero = _mm256_set1_epi16(WEIGHT_ZERO);
-                __m256i upper = _mm256_set1_epi16(WEIGHT16_SCALE);
-
-                int i = 0;
-                for (; i + 16 <= m_outputs; i += 16) {
-                    __m256i result = _mm256_min_epi16(
-                            _mm256_max_epi16(
-                                    _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
-                                    zero),
-                            upper);
-
-                    result = _mm256_srli_epi16(result, 6);
-                    _mm256_store_si256(
-                            reinterpret_cast<__m256i *>(m_output.data() + i),
-                            result);
-                }
-
-                for (; i < m_outputs; ++i) {
+                for (int i = 0; i < m_outputs; ++i) {
                     m_output[i] = clipped_relu(m_output[i]);
                 }
+
+                //                __m256i zero = _mm256_set1_epi16(WEIGHT_ZERO);
+                //                __m256i upper = _mm256_set1_epi16(WEIGHT16_SCALE);
+                //
+                //                int i = 0;
+                //                for (; i + 16 <= m_outputs; i += 16) {
+                //                    __m256i result = _mm256_min_epi16(
+                //                            _mm256_max_epi16(
+                //                                    _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+                //                                    zero),
+                //                            upper);
+                //
+                //                    result = _mm256_srli_epi16(result, 6);
+                //                    _mm256_store_si256(
+                //                            reinterpret_cast<__m256i *>(m_output.data() + i),
+                //                            result);
+                //                }
+                //
+                //                for (; i < m_outputs; ++i) {
+                //                    m_output[i] = clipped_relu(m_output[i]);
+                //                }
             }
         }
 
         void update_add(int idx) {
-            //            for (int i = 0; i < m_outputs; ++i) {
-            //                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            }
+
+            //            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
+            //            int i = 0;
+            //            for (; i + 16 <= m_outputs; i += 16) {
+            //                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
+            //                weights = _mm256_mullo_epi16(weights, scalar);
+            //
+            //                __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+            //                                                  weights);
+            //
+            //                _mm256_store_si256(
+            //                        reinterpret_cast<__m256i *>(m_output.data() + i),
+            //                        result);
             //            }
-
-            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
-            int i = 0;
-            for (; i + 16 <= m_outputs; i += 16) {
-                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
-                weights = _mm256_mullo_epi16(weights, scalar);
-
-                __m256i result = _mm256_add_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
-                                                  weights);
-
-                _mm256_store_si256(
-                        reinterpret_cast<__m256i *>(m_output.data() + i),
-                        result);
-            }
-            for (; i < m_outputs; ++i) {
-                m_output[i] += m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
-            }
+            //            for (; i < m_outputs; ++i) {
+            //                m_output[i] += m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
+            //            }
         }
 
         void update_sub(int idx) {
-            //            for (int i = 0; i < m_outputs; ++i) {
-            //                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]) * WEIGHT8_SCALE;
+            }
+
+            //            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
+            //            int i = 0;
+            //            for (; i + 16 <= m_outputs; i += 16) {
+            //                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
+            //                weights = _mm256_mullo_epi16(weights, scalar);
+            //
+            //                __m256i result = _mm256_sub_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
+            //                                                  weights);
+            //
+            //                _mm256_store_si256(
+            //                        reinterpret_cast<__m256i *>(m_output.data() + i),
+            //                        result);
             //            }
-
-            __m256i scalar = _mm256_set1_epi16(WEIGHT8_SCALE);
-            int i = 0;
-            for (; i + 16 <= m_outputs; i += 16) {
-                __m256i weights = _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i));
-                weights = _mm256_mullo_epi16(weights, scalar);
-
-                __m256i result = _mm256_sub_epi16(_mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i)),
-                                                  weights);
-
-                _mm256_store_si256(
-                        reinterpret_cast<__m256i *>(m_output.data() + i),
-                        result);
-            }
-            for (; i < m_outputs; ++i) {
-                m_output[i] -= m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
-            }
+            //            for (; i < m_outputs; ++i) {
+            //                m_output[i] -= m_weights[idx * m_outputs + i] * WEIGHT8_SCALE;
+            //            }
         }
     };
 
