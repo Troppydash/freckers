@@ -64,7 +64,7 @@ def round(agents, elos, names):
     n = len(agents)
     k = 25
 
-    with multiprocessing.Pool(10) as p:
+    with multiprocessing.Pool(1) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):

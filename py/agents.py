@@ -98,6 +98,15 @@ class V61(Engine):
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
 
+class V62(Engine):
+    def __init__(self):
+        super().__init__(load_dll('v62/libfrecker.so'))
+
+        dirname = os.path.dirname(__file__)
+        weights = os.path.join(dirname, './binaries/v62/')
+        self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
+
 
 class Latest(Engine):
     def __init__(self):

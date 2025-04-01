@@ -405,18 +405,16 @@ namespace engine {
                 return evaluate();
             }
 
-            std::vector<move> moves = m_pos.get_jump_moves();
-            bool critical = !moves.empty();
             int best_score = evaluate();
 
-            if (!critical && best_score >= beta) {
+            if (best_score >= beta) {
                 return best_score;
             }
-
             if (best_score > alpha) {
                 alpha = best_score;
             }
 
+            std::vector<move> moves = m_pos.get_jump_moves();
             auto null = move::null();
             auto scored_moves = score_moves(moves, null, max_ply);
 
@@ -573,18 +571,18 @@ namespace engine {
                 return tt_score;
             }
 
-//            if (!is_pv_node && m_pos.has_crossed() && depth >= 5) {
-//                int best_score = 0;
-//                int turns = 0;
-//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-//
-//                if (ok) {
-//                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
-//
-//                    return best_score;
-//                }
-//            }
+            //            if (!is_pv_node && m_pos.has_crossed() && depth >= 5) {
+            //                int best_score = 0;
+            //                int turns = 0;
+            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+            //
+            //                if (ok) {
+            //                    entry.set(m_pos.hash(), best_score, *pv_line.rbegin(), ply, 1e9, param::exact_flag);
+            //
+            //                    return best_score;
+            //                }
+            //            }
 
 
             // null move pruning
