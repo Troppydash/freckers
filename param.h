@@ -16,10 +16,15 @@ namespace param {
     int max_depth = 40;
 
     int base_score = (1 << 20);
+//    int pv_move_score = 500;
+//    int killer_move_score = 400;
+//    int second_killer_move_score = 300;
+//    int end_move_score = 100;
+
     int pv_move_score = 500;
-    int killer_move_score = 400;
-    int second_killer_move_score = 300;
-    int end_move_score = 100;
+    int killer_move_score = 499;
+    int killer_move_score2 = 498;
+    int end_move_score = 497;
 }
 
 

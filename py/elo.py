@@ -16,7 +16,7 @@ def playoff(engine1, engine2):
     pos = Pos()
 
     # random moves
-    left = 10
+    left = 5
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
         # if random.random() < 0.5:

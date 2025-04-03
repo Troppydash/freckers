@@ -59,7 +59,7 @@ namespace engine {
             return {adj_score, should_use, best_move};
         }
 
-        void set(uint64_t hash, int score, move &best_move, int ply, int depth, int flag) {
+        void set(pos &pos, uint64_t hash, int score, move &best_move, int ply, int depth, int flag) {
             m_hash = hash;
             m_depth = depth;
             m_best_move = best_move;
@@ -92,6 +92,17 @@ namespace engine {
         entry &probe(uint64_t hash) {
             uint64_t index = hash % m_size;
             return m_entries[index];
+        }
+
+        double occupied() {
+            int count = 0;
+            for (auto &entry: m_entries) {
+                if (entry.m_hash != 0) {
+                    count++;
+                }
+            }
+
+            return (double) count / m_entries.size();
         }
     };
 
@@ -139,7 +150,7 @@ namespace engine {
         endgame::a_star m_solver_blue;
 
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+            : m_tt(128), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED), m_solver_blue(board::BLUE) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -163,11 +174,6 @@ namespace engine {
 
         int nnue_evaluate() {
             return m_nnue.compute(m_pos.m_turn == board::BLUE);
-            return std::min(40, std::max(-40, m_nnue.compute(m_pos.m_turn == board::BLUE)));
-            //            return static_cast<int>(score * 40.0 * 100.0);
-            //            score = std::min(0.9999, std::max(0.0001, score));
-            //            int move_tempo = 0;
-            //            return static_cast<int>(-400.0 * log(1.0 / score - 1.0)) + move_tempo;
         }
 
         int classical_evaluate() {
@@ -207,10 +213,57 @@ namespace engine {
         }
 
         int evaluate() {
-            return nnue_evaluate();
+            int tempo = 0;
+            return nnue_evaluate() + tempo * 100;
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply) {
+            //            std::vector<std::pair<int, int>> scores;
+            //            for (int i = 0; i < moves.size(); ++i) {
+            //                int score = 0;
+            //                move &move = moves[i];
+            //
+            //                if (move == pv_move) {
+            //                    score += param::base_score + param::pv_move_score;
+            //                } else if (move == m_killers[ply][0]) {
+            //                    score += param::base_score + param::killer_move_score;
+            //                } else if (!move.is_grow()) {
+            //                    // end game rankings
+            //                    auto start = bitboard::get_coord(move.m_start);
+            //                    auto end = bitboard::get_coord(move.m_end);
+            //                    auto coord = move.get_coords();
+            //                    int vgap = abs(start.first - end.first);
+            //                    int hgap = abs(start.second - end.second);
+            //
+            //                    bool is_red = m_pos.m_turn == board::RED;
+            //                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
+            //                    if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
+            //                        // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
+            //                        score += 0;
+            //                    } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
+            //                        // do consider the move if we will finish at end
+            //                        score += param::base_score + param::end_move_score;
+            //                    } else if (vgap >= 2) {
+            //                        score += param::base_score + vgap * 10;
+            //                    } else if (hgap >= 2) {
+            //                        // dont consider large h moves
+            //                        score += 0;
+            //                    } else {
+            //                        int history = m_history[m_pos.m_turn][coord.first][coord.second];
+            //                        score += history;
+            //                    }
+            //                } else {
+            //                    int count = __builtin_popcountll(move.m_grow);
+            //                    if (count <= 1) {
+            //                        score -= 10;
+            //                    } else {
+            //                        score += count * 10;
+            //                    }
+            //                }
+            //
+            //                scores.push_back({score, i});
+            //            }
+
             std::vector<std::pair<int, int>> scores;
             for (int i = 0; i < moves.size(); ++i) {
                 int score = 0;
@@ -218,13 +271,9 @@ namespace engine {
 
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
-                } else if (move == m_killers[ply][0]) {
-                    score += param::base_score + param::killer_move_score;
-                } else if (!move.is_grow()) {
-                    // end game rankings
+                } else if (move.is_jump()) {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
-                    auto coord = move.get_coords();
                     int vgap = abs(start.first - end.first);
                     int hgap = abs(start.second - end.second);
 
@@ -236,12 +285,27 @@ namespace engine {
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
-                    } else if (vgap >= 2) {
-                        score += param::base_score + vgap * 10;
-                    } else if (hgap >= 2) {
-                        // dont consider large h moves
-                        score += 0;
                     } else {
+                        score += param::base_score + 20 * vgap + hgap;
+                    }
+                } else if (move == m_killers[ply][0]) {
+                    score += param::base_score + param::killer_move_score;
+                } else if (move == m_killers[ply][1]) {
+                    score += param::base_score + param::killer_move_score2;
+                } else if (!move.is_grow()) {
+                    auto start = bitboard::get_coord(move.m_start);
+                    auto end = bitboard::get_coord(move.m_end);
+                    bool is_red = m_pos.m_turn == board::RED;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
+                    if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
+                        // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
+                        score += 0;
+                    } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
+                        // do consider the move if we will finish at end
+                        score += param::base_score + param::end_move_score;
+                    } else {
+                        // end game rankings
+                        auto coord = move.get_coords();
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
                         score += history;
                     }
@@ -268,6 +332,19 @@ namespace engine {
                     swap(scored_moves[i], scored_moves[j]);
                 }
             }
+
+            //            int best_score = scored_moves[i].first;
+            //            int best_index = i;
+            //            for (int j = i + 1; j < scored_moves.size(); ++j) {
+            //                if (scored_moves[j].first > best_score) {
+            //                    best_score = scored_moves[j].first;
+            //                    best_index = j;
+            //                }
+            //            }
+            //
+            //            if (best_index != i) {
+            //                swap(scored_moves[i], scored_moves[best_index]);
+            //            }
         }
 
 
@@ -302,7 +379,7 @@ namespace engine {
         void store_killer(int ply, const move &killer) {
             if (!killer.is_jump()) {
                 if (m_killers[ply][0] != killer) {
-                    //                    m_killers[ply][1] = m_killers[ply][0];
+                    m_killers[ply][1] = m_killers[ply][0];
                     m_killers[ply][0] = killer;
                 }
             }
@@ -507,11 +584,11 @@ namespace engine {
             }
 
             // todo: this might push_back null
-//            if (m_pos.m_turn == board::RED) {
-//                pv_line.push_back(best_red_move);
-//            } else {
-//                pv_line.push_back(best_blue_move);
-//            }
+            //            if (m_pos.m_turn == board::RED) {
+            //                pv_line.push_back(best_red_move);
+            //            } else {
+            //                pv_line.push_back(best_blue_move);
+            //            }
 
             if (m_pos.m_turn == board::RED) {
                 if (results[board::BLUE] < results[board::RED]) {
@@ -572,19 +649,19 @@ namespace engine {
                 return tt_score;
             }
 
-//            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 5) {
-//                int best_score = 0;
-//                int turns = 0;
-//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-//
-//                if (ok) {
-//                    move null = move::null();
-//                    entry.set(m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
-//
-//                    return best_score;
-//                }
-//            }
+            //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 5) {
+            //                int best_score = 0;
+            //                int turns = 0;
+            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+            //
+            //                if (ok) {
+            //                    move null = move::null();
+            //                    entry.set(m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
+            //
+            //                    return best_score;
+            //                }
+            //            }
 
 
             // null move pruning
@@ -682,7 +759,7 @@ namespace engine {
             }
 
             if (depth > entry.m_depth && !m_timer.m_is_stopped) {
-                entry.set(m_pos.hash(), best_score, best_move, ply, depth, tt_flag);
+                entry.set(m_pos, m_pos.hash(), best_score, best_move, ply, depth, tt_flag);
             }
 
             return best_score;
@@ -767,8 +844,8 @@ namespace engine {
                     std::chrono::milliseconds now = m_timer.now();
                     long delta = (now - last).count();
                     int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, ", depth, m_searched, m_astar_searched,
-                           get_score(score).c_str(), score, nps);
+                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, occ %.2lf%%, ", depth, m_searched, m_astar_searched,
+                           get_score(score).c_str(), score, nps, m_tt.occupied() * 100.0);
 
                     printf("pv = [ ");
                     for (auto m: pv_line) {

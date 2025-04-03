@@ -56,7 +56,7 @@ class Session:
         pass
 
     def against(self, x):
-        ts = 300
+        ts = 800
 
         past, n, current, name = x
 
@@ -210,6 +210,22 @@ class Session51(Session):
         return agents.V5, "(current)"
 
 
+class Session6(Session):
+    # ts = 800
+    # 0.85
+    def past_agents(self):
+        opp = [agents.V0] * 1 + [agents.V1] * 1 + [agents.V2] * 1 + [agents.V32] * 2 + [agents.V4] * 2 + \
+              [agents.V5] * 4 + [agents.V6] * 8 + [agents.V62] * 16
+        names = ["v0", "v1", "v2", "v32(1)", "v32(2)", "v4(1)", "v4(2)", "v5(1)", "v5(2)", "v5(3)", "v5(4)"] + \
+                [f"v6({i})" for i in range(8)] + [f"v62({i})" for i in range(16)]
+
+        assert len(opp) == len(names) == 35
+        return opp, names
+
+    def current_agent(self):
+        return agents.V62, "(current)"
+
+
 if __name__ == '__main__':
-    session = Session51("session51")
+    session = Session6("session6")
     session.generate()

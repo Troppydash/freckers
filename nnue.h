@@ -42,21 +42,21 @@ namespace nnue {
             }
 
             //            __m256i zero = _mm256_setzero_si256();
-//            __m256i upper = _mm256_set1_epi16(WEIGHT8_SCALE);
-//
-//            constexpr uint64_t register_width = 256 / 16;
-//            constexpr uint64_t num_chunks = N / register_width;
-//
-//
-//            for (int i = 0; i < num_chunks; ++i) {
-//                __m256i input = _mm256_load_si256(reinterpret_cast<__m256i *>(&x[i * register_width]));
-//                __m256i output = _mm256_min_epi16(
-//                        _mm256_max_epi16(
-//                                input,
-//                                zero),
-//                        upper);
-//                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), output);
-//            }
+            //            __m256i upper = _mm256_set1_epi16(WEIGHT8_SCALE);
+            //
+            //            constexpr uint64_t register_width = 256 / 16;
+            //            constexpr uint64_t num_chunks = N / register_width;
+            //
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                __m256i input = _mm256_load_si256(reinterpret_cast<__m256i *>(&x[i * register_width]));
+            //                __m256i output = _mm256_min_epi16(
+            //                        _mm256_max_epi16(
+            //                                input,
+            //                                zero),
+            //                        upper);
+            //                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), output);
+            //            }
         }
     };
 
@@ -190,47 +190,47 @@ namespace nnue {
         }
 
         void update_add(int idx) {
-            //            for (int i = 0; i < m_outputs; ++i) {
-            //                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+            }
+
+            //            constexpr uint64_t register_width = 256 / 16;
+            //            constexpr uint64_t num_chunks = 64 / register_width;
+            //            static __m256i regs[num_chunks];
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                regs[i] = _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width));
             //            }
-
-            constexpr uint64_t register_width = 256 / 16;
-            constexpr uint64_t num_chunks = 64 / register_width;
-            static __m256i regs[num_chunks];
-
-            for (int i = 0; i < num_chunks; ++i) {
-                regs[i] = _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width));
-            }
-
-            for (int i = 0; i < num_chunks; ++i) {
-                regs[i] = _mm256_add_epi16(regs[i], _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i * register_width)));
-            }
-
-            for (int i = 0; i < num_chunks; ++i) {
-                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), regs[i]);
-            }
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                regs[i] = _mm256_add_epi16(regs[i], _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i * register_width)));
+            //            }
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), regs[i]);
+            //            }
         }
 
         void update_sub(int idx) {
-            //            for (int i = 0; i < m_outputs; ++i) {
-            //                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+            }
+
+            //            constexpr uint64_t register_width = 256 / 16;
+            //            constexpr uint64_t num_chunks = 64 / register_width;
+            //            static __m256i regs[num_chunks];
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                regs[i] = _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width));
             //            }
-
-            constexpr uint64_t register_width = 256 / 16;
-            constexpr uint64_t num_chunks = 64 / register_width;
-            static __m256i regs[num_chunks];
-
-            for (int i = 0; i < num_chunks; ++i) {
-                regs[i] = _mm256_load_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width));
-            }
-
-            for (int i = 0; i < num_chunks; ++i) {
-                regs[i] = _mm256_sub_epi16(regs[i], _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i * register_width)));
-            }
-
-            for (int i = 0; i < num_chunks; ++i) {
-                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), regs[i]);
-            }
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                regs[i] = _mm256_sub_epi16(regs[i], _mm256_load_si256(reinterpret_cast<__m256i *>(m_weights.data() + (idx * m_outputs) + i * register_width)));
+            //            }
+            //
+            //            for (int i = 0; i < num_chunks; ++i) {
+            //                _mm256_store_si256(reinterpret_cast<__m256i *>(m_output.data() + i * register_width), regs[i]);
+            //            }
         }
     };
 
@@ -302,33 +302,33 @@ namespace nnue {
                 size_t blue_offset = (1 - flip) * offset;
                 size_t red_offset = flip * offset;
 
-                //                for (int i = 0; i < m_red_accum.m_outputs; ++i) {
-                //                    m_accum_output[flip * offset + i] = m_red_accum.m_output[i];
-                //                }
-                {
-                    constexpr uint64_t register_width = 256 / 16;
-                    constexpr uint64_t num_chunks = 64 / register_width;
-
-                    for (int i = 0; i < num_chunks; ++i) {
-                        _mm256_store_si256(
-                                reinterpret_cast<__m256i *>(m_accum_output.data() + red_offset + i * register_width),
-                                _mm256_load_si256(reinterpret_cast<__m256i *>(m_red_accum.m_output.data() + i * register_width)));
-                    }
+                for (int i = 0; i < m_red_accum.m_outputs; ++i) {
+                    m_accum_output[flip * offset + i] = m_red_accum.m_output[i];
                 }
-
-                //                for (int i = 0; i < m_blue_accum.m_outputs; ++i) {
-                //                    m_accum_output[blue_offset + i] = m_blue_accum.m_output[i];
+                //                {
+                //                    constexpr uint64_t register_width = 256 / 16;
+                //                    constexpr uint64_t num_chunks = 64 / register_width;
+                //
+                //                    for (int i = 0; i < num_chunks; ++i) {
+                //                        _mm256_store_si256(
+                //                                reinterpret_cast<__m256i *>(m_accum_output.data() + red_offset + i * register_width),
+                //                                _mm256_load_si256(reinterpret_cast<__m256i *>(m_red_accum.m_output.data() + i * register_width)));
+                //                    }
                 //                }
-                {
-                    constexpr uint64_t register_width = 256 / 16;
-                    constexpr uint64_t num_chunks = 64 / register_width;
 
-                    for (int i = 0; i < num_chunks; ++i) {
-                        _mm256_store_si256(
-                                reinterpret_cast<__m256i *>(m_accum_output.data() + blue_offset + i * register_width),
-                                _mm256_load_si256(reinterpret_cast<__m256i *>(m_blue_accum.m_output.data() + i * register_width)));
-                    }
+                for (int i = 0; i < m_blue_accum.m_outputs; ++i) {
+                    m_accum_output[blue_offset + i] = m_blue_accum.m_output[i];
                 }
+                //                {
+                //                    constexpr uint64_t register_width = 256 / 16;
+                //                    constexpr uint64_t num_chunks = 64 / register_width;
+                //
+                //                    for (int i = 0; i < num_chunks; ++i) {
+                //                        _mm256_store_si256(
+                //                                reinterpret_cast<__m256i *>(m_accum_output.data() + blue_offset + i * register_width),
+                //                                _mm256_load_si256(reinterpret_cast<__m256i *>(m_blue_accum.m_output.data() + i * register_width)));
+                //                    }
+                //                }
 
 
                 m_relu1.forward(m_accum_output);

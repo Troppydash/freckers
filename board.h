@@ -8,6 +8,7 @@
 #include "colors.h"
 #include <cinttypes>
 #include <cstdio>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -250,6 +251,82 @@ namespace board {
         }
     };
 
+
+    class dynamic_hash {
+    public:
+        uint64_t m_position_hashes[64][3];
+        uint64_t m_turn_hash[2];
+
+        uint64_t m_hash;
+        dynamic_hash() {
+            static std::default_random_engine rng;
+            std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+            for (int i = 0; i < 64; ++i) {
+                for (int k = 0; k < 3; ++k) {
+                    m_position_hashes[i][k] = dist(rng);
+                }
+            }
+
+            m_turn_hash[0] = dist(rng);
+            m_turn_hash[1] = dist(rng);
+            m_hash = 0;
+        }
+
+        void init(board::mask red, board::mask blue, board::mask lily) {
+            while (red > 0) {
+                int i = __builtin_ctzll(red);
+                red ^= (1ull << i);
+
+                m_hash ^= m_position_hashes[i][0];
+            }
+
+            while (blue > 0) {
+                int i = __builtin_ctzll(blue);
+                blue ^= (1ull << i);
+
+                m_hash ^= m_position_hashes[i][1];
+            }
+
+            while (lily > 0) {
+                int i = __builtin_ctzll(lily);
+                lily ^= (1ull << i);
+
+                m_hash ^= m_position_hashes[i][2];
+            }
+        }
+
+        void push(board::move &move, int turn) {
+            if (move.is_null()) {
+                return;
+            }
+
+            if (move.is_grow()) {
+                board::mask m = move.m_grow;
+                while (m > 0) {
+                    int i = __builtin_ctzll(m);
+                    m ^= (1ull << i);
+
+                    m_hash ^= m_position_hashes[i][2];
+                }
+            } else {
+                int from = __builtin_ctzll(move.m_start);
+                int to = __builtin_ctzll(move.m_end);
+                m_hash ^= m_position_hashes[from][turn];
+                m_hash ^= m_position_hashes[to][turn];
+                m_hash ^= m_position_hashes[from][2];
+            }
+        }
+
+        void pop(board::move &move, int turn) {
+            push(move, turn);
+        }
+
+        uint64_t get_hash(int turn) const {
+            return m_hash ^ m_turn_hash[turn];
+        }
+    };
+
+
     class pos {
     public:
         // every position of the current lily pads on the board
@@ -260,6 +337,8 @@ namespace board {
         int m_turn;
         // move counter
         int m_moves = 0;
+
+        dynamic_hash m_hasher;
 
         // Default Constructor
         pos() {
@@ -303,11 +382,14 @@ namespace board {
             m_turn = RED;
             // Move counter
             m_moves = 0;
+
+            m_hasher.init(m_players[0], m_players[1], m_lilypads);
         }
 
         // Constructor
         pos(mask mLilypads, mask red, mask blue, int mTurn, int mMoves) : m_lilypads(mLilypads), m_players{red, blue},
                                                                           m_turn(mTurn), m_moves(mMoves) {
+            m_hasher.init(m_players[0], m_players[1], m_lilypads);
         }
 
         // A function that convert a position string to a position pos
@@ -583,6 +665,8 @@ namespace board {
 
         // A function to do the move
         void push(move &play) {
+            m_hasher.push(play, m_turn);
+
             if (play.is_null()) {
                 // If the move is empty
                 // Do nothing
@@ -631,6 +715,8 @@ namespace board {
                 // Add the current frog from the team it was on
                 m_players[m_turn] |= play.m_start;
             }
+
+            m_hasher.pop(play, m_turn);
         }
 
         // A function to check the current state of the game
@@ -668,13 +754,13 @@ namespace board {
         // check if two sides crossed
         bool has_crossed() {
             int top_red_row = __builtin_ctzll(m_players[RED]) / 8;
-            int bottom_blue_row = (63-__builtin_clzll(m_players[BLUE])) / 8;
+            int bottom_blue_row = (63 - __builtin_clzll(m_players[BLUE])) / 8;
             return top_red_row + 1 > bottom_blue_row;
         }
 
         std::pair<int, int> crossed_gap() {
             int top_red_row = __builtin_ctzll(m_players[RED]) / 8;
-            int bottom_blue_row = (63-__builtin_clzll(m_players[BLUE])) / 8;
+            int bottom_blue_row = (63 - __builtin_clzll(m_players[BLUE])) / 8;
             return {top_red_row, 7 - bottom_blue_row};
         }
 
@@ -714,7 +800,8 @@ namespace board {
         }
 
         uint64_t hash() const {
-            return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
+            //            return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
+            return m_hasher.get_hash(m_turn);
         }
 
         bool operator==(const pos &other) const {

@@ -15,8 +15,8 @@ import engine
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
-pk_file = "session51"
-session = "session52"
+pk_file = "session6"
+session = "session6"
 
 
 def bitmask_to_array(mask: int):
@@ -64,12 +64,12 @@ class FreckersDataset(Dataset):
         X = []
         y = []
 
-        for file in glob.glob('./sessions/*.pk'):
+        for file in glob.glob(f'./sessions/{pk_file}/*.pk'):
             if file.endswith('_backup.pk'):
                 continue
 
-            if not (os.path.basename(file).startswith(pk_file)):
-                continue
+            # if not (os.path.basename(file).startswith(pk_file)):
+            #     continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
 
@@ -105,7 +105,7 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.8
+                lambda_ = 0.7
                 if eval > 100000:
                     normalized = 1
                 elif eval < -100000:
@@ -129,9 +129,9 @@ class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.layer1 = nn.Linear(8 * 8 * 2, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(128, 32, dtype=torch.float32)
-        self.layer3 = nn.Linear(32, 32, dtype=torch.float32)
-        self.layer4 = nn.Linear(32, 1, dtype=torch.float32)
+        self.layer2 = nn.Linear(64*2, 32, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
+        self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -149,7 +149,7 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.003, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.005, eps=1e-8)
     scheduler = ReduceLROnPlateau(optimizer, 'min')
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
@@ -233,8 +233,8 @@ if __name__ == '__main__':
     train(
         {
             "lr": 0.00004,
-            "batch_size": 4096 * 8,
-            "test_batch": 4096 * 16,
+            "batch_size": 4096 * 16,
+            "test_batch": 4096 * 32,
             "momentum": 0.9,
         }
     )
