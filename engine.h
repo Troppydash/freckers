@@ -143,6 +143,7 @@ namespace engine {
         int m_history[2][64][64];
         int m_lmr[50][100];
         move m_killers[100][2];
+        move m_counter[2][64][64];
 
         nnue::seq m_nnue;
 
@@ -163,6 +164,14 @@ namespace engine {
             for (auto &m: m_killers) {
                 m[0] = move::null();
                 m[1] = move::null();
+            }
+
+            for (auto &i: m_counter) {
+                for (auto &j: i) {
+                    for (auto &k: j) {
+                        k = move::null();
+                    }
+                }
             }
 
             for (int depth = 0; depth < 50; ++depth) {
@@ -217,53 +226,7 @@ namespace engine {
             return nnue_evaluate() + tempo * 100;
         }
 
-        std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply) {
-            //            std::vector<std::pair<int, int>> scores;
-            //            for (int i = 0; i < moves.size(); ++i) {
-            //                int score = 0;
-            //                move &move = moves[i];
-            //
-            //                if (move == pv_move) {
-            //                    score += param::base_score + param::pv_move_score;
-            //                } else if (move == m_killers[ply][0]) {
-            //                    score += param::base_score + param::killer_move_score;
-            //                } else if (!move.is_grow()) {
-            //                    // end game rankings
-            //                    auto start = bitboard::get_coord(move.m_start);
-            //                    auto end = bitboard::get_coord(move.m_end);
-            //                    auto coord = move.get_coords();
-            //                    int vgap = abs(start.first - end.first);
-            //                    int hgap = abs(start.second - end.second);
-            //
-            //                    bool is_red = m_pos.m_turn == board::RED;
-            //                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
-            //                    if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
-            //                        // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
-            //                        score += 0;
-            //                    } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
-            //                        // do consider the move if we will finish at end
-            //                        score += param::base_score + param::end_move_score;
-            //                    } else if (vgap >= 2) {
-            //                        score += param::base_score + vgap * 10;
-            //                    } else if (hgap >= 2) {
-            //                        // dont consider large h moves
-            //                        score += 0;
-            //                    } else {
-            //                        int history = m_history[m_pos.m_turn][coord.first][coord.second];
-            //                        score += history;
-            //                    }
-            //                } else {
-            //                    int count = __builtin_popcountll(move.m_grow);
-            //                    if (count <= 1) {
-            //                        score -= 10;
-            //                    } else {
-            //                        score += count * 10;
-            //                    }
-            //                }
-            //
-            //                scores.push_back({score, i});
-            //            }
-
+        std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply, const move &prev_move) {
             std::vector<std::pair<int, int>> scores;
             for (int i = 0; i < moves.size(); ++i) {
                 int score = 0;
@@ -285,7 +248,11 @@ namespace engine {
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
-                    } else {
+                    }
+                    //                    else if (vgap < 2 && hgap >= 2) {
+                    //                        score += 0;
+                    //                    }
+                    else {
                         score += param::base_score + 20 * vgap + hgap;
                     }
                 } else if (move == m_killers[ply][0]) {
@@ -304,7 +271,13 @@ namespace engine {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
                     } else {
-                        // end game rankings
+                        if (prev_move.is_storable()) {
+                            auto coord = prev_move.get_coords();
+                            if (move == m_counter[m_pos.m_turn][coord.first][coord.second]) {
+                                score += 10;
+                            }
+                        }
+
                         auto coord = move.get_coords();
                         int history = m_history[m_pos.m_turn][coord.first][coord.second];
                         score += history;
@@ -347,9 +320,16 @@ namespace engine {
             //            }
         }
 
+        void incr_counter(const move &prev_move, move &move) {
+            if (prev_move.is_storable() && move.is_slient()) {
+                auto coord = prev_move.get_coords();
+                m_counter[m_pos.m_turn][coord.first][coord.second] = move;
+            }
+        }
+
 
         void incr_history(move &move, int depth) {
-            if (move.is_grow())
+            if (!move.is_slient())
                 return;
 
             auto coord = move.get_coords();
@@ -366,7 +346,7 @@ namespace engine {
         }
 
         void decr_history(move &move) {
-            if (move.is_grow())
+            if (!move.is_slient())
                 return;
 
             auto coord = move.get_coords();
@@ -377,7 +357,7 @@ namespace engine {
         }
 
         void store_killer(int ply, const move &killer) {
-            if (!killer.is_jump()) {
+            if (killer.is_slient()) {
                 if (m_killers[ply][0] != killer) {
                     m_killers[ply][1] = m_killers[ply][0];
                     m_killers[ply][0] = killer;
@@ -493,7 +473,7 @@ namespace engine {
 
             std::vector<move> moves = m_pos.get_jump_moves();
             auto null = move::null();
-            auto scored_moves = score_moves(moves, null, max_ply);
+            auto scored_moves = score_moves(moves, null, max_ply, null);
 
             std::vector<move> child_pv_line;
 
@@ -612,7 +592,7 @@ namespace engine {
         }
 
 
-        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, bool do_null = true) {
+        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, const move &prev_move, bool do_null = true) {
             m_searched += 1;
 
             if (m_searched % 2048 == 0) {
@@ -649,20 +629,19 @@ namespace engine {
                 return tt_score;
             }
 
-            //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 5) {
-            //                int best_score = 0;
-            //                int turns = 0;
-            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-            //
-            //                if (ok) {
-            //                    move null = move::null();
-            //                    entry.set(m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
-            //
-            //                    return best_score;
-            //                }
-            //            }
-
+//            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 8) {
+//                int best_score = 0;
+//                int turns = 0;
+//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+//
+//                if (ok) {
+//                    move null = move::null();
+//                    entry.set(m_pos, m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
+//
+//                    return best_score;
+//                }
+//            }
 
             // null move pruning
             if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
@@ -671,7 +650,7 @@ namespace engine {
 
                 int r = 3;
                 std::vector<move> child_pv_line;
-                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, false);
+                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
                 m_pos.pop(null);
 
                 if (m_timer.m_is_stopped) {
@@ -684,7 +663,7 @@ namespace engine {
             }
 
             auto moves = m_pos.get_moves();
-            auto scored_moves = score_moves(moves, tt_move, ply);
+            auto scored_moves = score_moves(moves, tt_move, ply, prev_move);
 
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
@@ -701,24 +680,24 @@ namespace engine {
                 int explored_moves = i + 1;
                 int score;
                 if (explored_moves == 1) {
-                    score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                    score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
                 } else {
                     int reduction = 0;
-                    if (!is_pv_node && m_pos.get_jump_moves().empty() && explored_moves >= 3 && depth >= 3) {
+                    if (!is_pv_node && !m_pos.has_jumps() && explored_moves >= 3 && depth >= 3) {
                         reduction = m_lmr[depth][explored_moves];
                     }
 
-                    score = -negamax(depth - 1 - reduction, ply + 1, -(alpha + 1), -alpha, child_pv_line);
+                    score = -negamax(depth - 1 - reduction, ply + 1, -(alpha + 1), -alpha, child_pv_line, move);
                     if (score > alpha && reduction > 0) {
                         child_pv_line.clear();
-                        score = -negamax(depth - 1, ply + 1, -(alpha + 1), -alpha, child_pv_line);
+                        score = -negamax(depth - 1, ply + 1, -(alpha + 1), -alpha, child_pv_line, move);
                         if (score > alpha) {
                             child_pv_line.clear();
-                            score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                            score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
                         }
                     } else if (alpha < score && score < beta) {
                         child_pv_line.clear();
-                        score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line);
+                        score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
                     }
                 }
                 m_pos.pop(move);
@@ -736,6 +715,7 @@ namespace engine {
                 if (score >= beta) {
                     tt_flag = param::beta_flag;
                     incr_history(move, depth);
+                    incr_counter(prev_move, move);
                     store_killer(ply, move);
                     break;
                 } else {
@@ -834,7 +814,8 @@ namespace engine {
 
             while (depth <= param::max_depth) {
                 pv_line.clear();
-                int score = negamax(depth, 0, alpha, beta, pv_line);
+                move null = move::null();
+                int score = negamax(depth, 0, alpha, beta, pv_line, null);
 
                 if (!pv_line.empty()) {
                     best_move = pv_line[0];

@@ -6,6 +6,7 @@
 #define FRECKER_BOARD_H
 
 #include "colors.h"
+#include <chrono>
 #include <cinttypes>
 #include <cstdio>
 #include <random>
@@ -219,6 +220,14 @@ namespace board {
             return abs(start_r - end_r) >= 2 || abs(start_c - end_c) >= 2;
         }
 
+        bool is_storable() const {
+            return !(is_null() || is_grow());
+        }
+
+        bool is_slient() const {
+            return !(is_jump() || is_null() || is_grow());
+        }
+
         // A function to generate move from the starting position to the possible next position
         static void from_mask(mask pos, mask start, std::vector<move> &out) {
             while (pos > 0) {
@@ -254,12 +263,12 @@ namespace board {
 
     class dynamic_hash {
     public:
-        uint64_t m_position_hashes[64][3];
-        uint64_t m_turn_hash[2];
+        uint64_t m_position_hashes[64][3]{};
+        uint64_t m_turn_hash[2]{};
 
         uint64_t m_hash;
         dynamic_hash() {
-            static std::default_random_engine rng;
+            std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
             std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
             for (int i = 0; i < 64; ++i) {
                 for (int k = 0; k < 3; ++k) {
@@ -273,6 +282,7 @@ namespace board {
         }
 
         void init(board::mask red, board::mask blue, board::mask lily) {
+            m_hash = 0;
             while (red > 0) {
                 int i = __builtin_ctzll(red);
                 red ^= (1ull << i);
@@ -383,6 +393,11 @@ namespace board {
             // Move counter
             m_moves = 0;
 
+            m_hasher.init(m_players[0], m_players[1], m_lilypads);
+        }
+
+        pos(const pos &other)
+            : m_lilypads(other.m_lilypads), m_players{other.m_players[0], other.m_players[1]}, m_turn(other.m_turn), m_moves(other.m_moves), m_hasher(other.m_hasher) {
             m_hasher.init(m_players[0], m_players[1], m_lilypads);
         }
 
@@ -755,7 +770,7 @@ namespace board {
         bool has_crossed() {
             int top_red_row = __builtin_ctzll(m_players[RED]) / 8;
             int bottom_blue_row = (63 - __builtin_clzll(m_players[BLUE])) / 8;
-            return top_red_row + 1 > bottom_blue_row;
+            return bottom_blue_row < top_red_row - 1;
         }
 
         std::pair<int, int> crossed_gap() {
@@ -795,12 +810,8 @@ namespace board {
             return out;
         }
 
-        uint64_t cantor(uint64_t a, uint64_t b) const {
-            return (a + b + 1) * (a + b) / 2 + b;
-        }
 
         uint64_t hash() const {
-            //            return cantor(m_turn, cantor(m_players[0], cantor(m_players[1], m_lilypads)));
             return m_hasher.get_hash(m_turn);
         }
 

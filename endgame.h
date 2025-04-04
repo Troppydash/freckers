@@ -122,7 +122,7 @@ namespace endgame {
             // reset best_depth by opp to inf
             m_best_depth = 150;
             // limit depth searched to depth
-            m_depth_bound = depth - 5;
+            m_depth_bound = depth;
             // reset counter
             m_counter = 0;
         }

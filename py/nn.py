@@ -105,7 +105,7 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.7
+                lambda_ = 0.85
                 if eval > 100000:
                     normalized = 1
                 elif eval < -100000:
@@ -149,7 +149,7 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.005, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.003, eps=1e-8)
     scheduler = ReduceLROnPlateau(optimizer, 'min')
     # optimizer = optim.SGD(
     #     net.parameters(), lr=config["lr"], momentum=config["momentum"]
@@ -183,7 +183,7 @@ def train(config):
             loss.backward()
             optimizer.step()
             for p in net.parameters():
-                p.data.clamp_(-2.0, 2.0)
+                p.data.clamp_(-1.9, 1.9)
 
             running_loss += loss.sum().item()
             epoch_steps += 1
