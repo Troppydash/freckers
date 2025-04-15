@@ -149,7 +149,7 @@ namespace endgame {
                 node top = queue.top();
                 queue.pop();
 
-                if (visited.contains(top)) {
+                if (visited.count(top) != 0) {
                     continue;
                 }
                 visited.insert(top);

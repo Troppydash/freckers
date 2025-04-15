@@ -244,6 +244,10 @@ namespace board {
             return m_grow == other.m_grow && m_start == other.m_start && m_end == other.m_end;
         }
 
+        bool operator!=(const move &other) const {
+            return !(*this == other);
+        }
+
         // Display a move
         std::string display() const {
             if (is_grow()) {

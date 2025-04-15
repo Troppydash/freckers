@@ -4,9 +4,14 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 
 std::vector<std::string> get_weights(const std::string &base) {
     return {base + "./weights/weight_1.txt", base + "./weights/weight_2.txt", base + "./weights/weight_3.txt", base + "./weights/weight_4.txt"};
+}
+
+std::vector<std::string> get_weights_direct(const std::string &base) {
+    return {base + "weight_1.txt", base + "weight_2.txt", base + "weight_3.txt", base + "weight_4.txt"};
 }
 
 
@@ -16,6 +21,7 @@ struct instance {
     board::pos last_pos;
     std::vector<board::move> last_moves;
     std::string weights = "../";
+    engine::analysis *analysis;
 };
 
 
@@ -24,7 +30,7 @@ std::map<int, instance> instances;
 int next_handle = 0;
 
 int make_instance() {
-    instances[next_handle] = {0, {}, {}, {}};
+    instances[next_handle] = {0, {}, {}, {}, "../", nullptr};
     next_handle += 1;
     return next_handle - 1;
 }
@@ -43,6 +49,36 @@ void play(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int 
     board::pos pos{lily, red, blue, turn, moves};
     engine::computer engine{pos, get_weights(instances[handle].weights)};
     instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
+}
+
+void play_board(int handle, int ts, int verbose) {
+    engine::computer engine{instances[handle].last_pos, get_weights_direct(instances[handle].weights)};
+    instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
+}
+
+void start_ponder(int handle) {
+    if (instances[handle].analysis != nullptr) {
+        delete instances[handle].analysis;
+    }
+
+    engine::computer engine{instances[handle].last_pos, get_weights_direct(instances[handle].weights)};
+    auto *analysis = new engine::analysis{std::move(engine)};
+    instances[handle].analysis = analysis;
+}
+
+int ponder_once(int handle) {
+    if (instances[handle].analysis == nullptr) {
+        return 0;
+    }
+
+    return instances[handle].analysis->ponder();
+}
+
+int ponder_depth(int handle) {
+    if (instances[handle].analysis == nullptr) {
+        return 0;
+    }
+    return instances[handle].analysis->m_depth;
 }
 
 int get_last_score(int handle) {
@@ -134,12 +170,6 @@ bool pos_has_jumps(int handle) {
 }
 }
 
-
-int randint(int high) {
-    return rand() % high;
-}
-
-
 void test_position() {
     std::string file = "../positions.txt";
     std::ifstream buf{file};
@@ -214,8 +244,8 @@ void test_a_star_position() {
 
 
 int main() {
-    test_position();
-    return 0;
+//    test_position();
+//    return 0;
 
     board::pos pos;
 

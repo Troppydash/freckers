@@ -629,19 +629,19 @@ namespace engine {
                 return tt_score;
             }
 
-//            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 8) {
-//                int best_score = 0;
-//                int turns = 0;
-//                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-//                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-//
-//                if (ok) {
-//                    move null = move::null();
-//                    entry.set(m_pos, m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
-//
-//                    return best_score;
-//                }
-//            }
+            //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 8) {
+            //                int best_score = 0;
+            //                int turns = 0;
+            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+            //
+            //                if (ok) {
+            //                    move null = move::null();
+            //                    entry.set(m_pos, m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
+            //
+            //                    return best_score;
+            //                }
+            //            }
 
             // null move pruning
             if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
@@ -851,6 +851,41 @@ namespace engine {
                 printf("nodes %d\n", m_searched);
             }
             return best_move;
+        }
+    };
+
+    class analysis {
+    public:
+        int m_depth = 1;
+        int m_score = 0;
+        computer m_computer;
+
+        explicit analysis(computer &&computer)
+            : m_computer(std::move(computer)) {
+
+            auto [red, blue] = m_computer.init_nnue();
+            m_computer.m_nnue.init(red, blue);
+
+            m_computer.m_timer.start(10000);
+        }
+
+        int ponder() {
+            if (m_computer.m_timer.m_is_stopped) {
+                return m_score;
+            }
+
+            int alpha = -param::inf;
+            int beta = param::inf;
+            std::vector<move> pv_line;
+            move null = move::null();
+            int score = m_computer.negamax(m_depth, 0, alpha, beta, pv_line, null);
+            if (m_computer.m_timer.m_is_stopped) {
+                return m_score;
+            }
+
+            m_score = score;
+            m_depth++;
+            return m_score;
         }
     };
 }// namespace engine
