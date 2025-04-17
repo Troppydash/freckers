@@ -70,24 +70,28 @@ namespace nnue {
 
         explicit layer(std::string &weights) {
             std::ifstream file(weights);
-            m_inputs = 0;
-            m_outputs = 0;
-            file >> m_inputs >> m_outputs;
+            if (file.is_open()) {
+                m_inputs = 0;
+                m_outputs = 0;
+                file >> m_inputs >> m_outputs;
 
-            for (int i = 0; i < m_inputs * m_outputs; ++i) {
-                double tmp = 0.0;
-                file >> tmp;
-                m_weights.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
-            }
+                for (int i = 0; i < m_inputs * m_outputs; ++i) {
+                    double tmp = 0.0;
+                    file >> tmp;
+                    m_weights.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
+                }
 
-            for (int i = 0; i < m_outputs; ++i) {
-                double tmp = 0.0;
-                file >> tmp;
-                m_biases.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT16_SCALE)));
-            }
+                for (int i = 0; i < m_outputs; ++i) {
+                    double tmp = 0.0;
+                    file >> tmp;
+                    m_biases.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT16_SCALE)));
+                }
 
-            for (int i = 0; i < m_outputs; ++i) {
-                m_output.push_back(0);
+                for (int i = 0; i < m_outputs; ++i) {
+                    m_output.push_back(0);
+                }
+            } else {
+                throw std::runtime_error("cannot open file");
             }
         }
 
