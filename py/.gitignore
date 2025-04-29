@@ -3,3 +3,8 @@ models/
 sessions/
 binaries/
 da/
+elos/
+*.json
+*.png
+*.txt
+*.pk

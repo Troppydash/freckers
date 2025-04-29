@@ -222,7 +222,7 @@ namespace engine {
         }
 
         int evaluate() {
-            int tempo = 0;
+            int tempo = 2;
             return nnue_evaluate() + tempo * 100;
         }
 
@@ -248,11 +248,9 @@ namespace engine {
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
-                    }
-                    //                    else if (vgap < 2 && hgap >= 2) {
-                    //                        score += 0;
-                    //                    }
-                    else {
+                    } else if (vgap < 2 && hgap >= 2) {
+                        score += 0;
+                    } else {
                         score += param::base_score + 20 * vgap + hgap;
                     }
                 } else if (move == m_killers[ply][0]) {
@@ -629,22 +627,8 @@ namespace engine {
                 return tt_score;
             }
 
-            //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 8) {
-            //                int best_score = 0;
-            //                int turns = 0;
-            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
-            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
-            //
-            //                if (ok) {
-            //                    move null = move::null();
-            //                    entry.set(m_pos, m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
-            //
-            //                    return best_score;
-            //                }
-            //            }
-
             // null move pruning
-            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4 && evaluate() >= beta) {
+            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4) {
                 move null = move::null();
                 m_pos.push(null);
 
@@ -662,8 +646,17 @@ namespace engine {
                 }
             }
 
-            auto moves = m_pos.get_moves();
-            auto scored_moves = score_moves(moves, tt_move, ply, prev_move);
+            // lazily compute the list of moves, since the tt move likely causes the beta cutoff
+            std::vector<move> moves;
+            std::vector<std::pair<int, int>> scored_moves;
+            if (tt_move.is_null()) {
+                moves = m_pos.get_moves();
+                scored_moves = score_moves(moves, tt_move, ply, prev_move);
+            } else {
+                moves = {tt_move};
+                scored_moves = {{0, 0}};
+            }
+
 
             std::vector<move> child_pv_line;
             int best_score = -param::inf;
@@ -683,7 +676,7 @@ namespace engine {
                     score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
                 } else {
                     int reduction = 0;
-                    if (!is_pv_node && !m_pos.has_jumps() && explored_moves >= 3 && depth >= 3) {
+                    if (!is_pv_node && explored_moves >= 3 && depth >= 3) {
                         reduction = m_lmr[depth][explored_moves];
                     }
 
@@ -736,6 +729,15 @@ namespace engine {
                 }
 
                 child_pv_line.clear();
+
+                // compute full list if tt failed to beta cutoff
+                if (explored_moves == 1 && !tt_move.is_null()) {
+                    moves = m_pos.get_moves();
+                    scored_moves = score_moves(moves, tt_move, ply, prev_move);
+
+                    // ignore tt move, since this will always get the tt move first
+                    sort_scored_moves(scored_moves, 0);
+                }
             }
 
             if (depth > entry.m_depth && !m_timer.m_is_stopped) {

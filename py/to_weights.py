@@ -1,8 +1,7 @@
 import torch
 import numpy as np
 
-base = './models/session6/'
-# file = f"{base}model_120.pt"
+base = './models/session61/'
 file = f"{base}model_35.pt"
 model = torch.load(file)
 
@@ -43,3 +42,37 @@ for k, parameter in parameters.items():
     print('written to ' + f'{base}weight_{k}.txt')
     with open(f'{base}weight_{k}.txt', 'w') as f:
         f.write(' '.join(out_str))
+
+
+for k, parameter in parameters.items():
+    out = []
+    outputs, inputs = parameter[0].shape
+    out.append(inputs)
+    out.append(outputs)
+
+    biases = []
+    for i in range(inputs * outputs):
+        out.append(np.transpose(parameter[0]).flat[i])
+
+    for i in range(outputs):
+        biases.append(parameter[1].flat[i])
+
+    out_str = []
+    for i in out:
+        if isinstance(i, int):
+            out_str.append(str(i))
+        else:
+            out_str.append(f"{i:.15f}")
+
+    with open(f'{base}weight_py_{k}.txt', 'w') as f:
+        f.write(','.join(out_str))
+
+    out_str = []
+    for i in biases:
+        if isinstance(i, int):
+            out_str.append(str(i))
+        else:
+            out_str.append(f"{i:.15f}")
+
+    with open(f'{base}bias_py_{k}.txt', 'w') as f:
+        f.write(','.join(out_str))
