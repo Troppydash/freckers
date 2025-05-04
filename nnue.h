@@ -307,7 +307,7 @@ namespace nnue {
                 size_t red_offset = flip * offset;
 
                 for (int i = 0; i < m_red_accum.m_outputs; ++i) {
-                    m_accum_output[flip * offset + i] = m_red_accum.m_output[i];
+                    m_accum_output[red_offset + i] = m_red_accum.m_output[i];
                 }
                 //                {
                 //                    constexpr uint64_t register_width = 256 / 16;

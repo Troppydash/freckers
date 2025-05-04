@@ -91,11 +91,11 @@ class FreckersDataset(Dataset):
                 turn = positions[3]
                 moves = positions[4]
 
-                pos.of(positions[0], positions[1], positions[2], turn, moves)
-                if pos.has_jumps:
-                    # skip jump positions
-                    pct += 1
-                    continue
+                # pos.of(positions[0], positions[1], positions[2], turn, 0)
+                # if pos.has_jumps:
+                #     # skip jump positions
+                #     pct += 1
+                #     continue
 
                 # eval should be for the moving player
                 eval = dataset.evals[i]
@@ -114,13 +114,14 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.9
+                lambda_ = 0.8
                 if eval > 10000:
                     normalized = 1
                 elif eval < -10000:
                     normalized = -1
                 else:
-                    normalized = 2 / (1 + math.exp(-eval / 1000)) - 1
+                    normalized = 2 / (1 + math.exp(-eval / 1100)) - 1
+
                 avg = lambda_ * score + (1 - lambda_) * normalized
                 y.append([avg])
 
@@ -139,10 +140,10 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8 * 8 * 2, 128, dtype=torch.float32)
-        self.layer2 = nn.Linear(128 * 2, 32, dtype=torch.float32)
-        # self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
-        self.layer4 = nn.Linear(32, 1, dtype=torch.float32)
+        self.layer1 = nn.Linear(8 * 8 * 2, 64, dtype=torch.float32)
+        self.layer2 = nn.Linear(64 * 2, 16, dtype=torch.float32)
+        self.layer3 = nn.Linear(16, 16, dtype=torch.float32)
+        self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -150,7 +151,7 @@ class FreckersNeuralNetwork(nn.Module):
         x2 = self.layer1(torch.concat((x[:, 2 * 64:3 * 64], x[:, 3 * 64:]), dim=1))
         x = F.relu(torch.concat((x1, x2), dim=1)).clamp(max=1)
         x = F.relu(self.layer2(x)).clamp(max=1)
-        # x = F.relu(self.layer3(x)).clamp(max=1)
+        x = F.relu(self.layer3(x)).clamp(max=1)
         x = (self.layer4(x))
 
         return x
@@ -160,11 +161,11 @@ def train(config):
     net = FreckersNeuralNetwork().to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.002, eps=1e-8)
+    optimizer = optim.AdamW(net.parameters(), lr=0.004, eps=1e-8)
     scheduler = ReduceLROnPlateau(optimizer, 'min')
 
     dataset = FreckersDataset()
-    train_dataset, test_dataset = random_split(dataset, [0.9, 0.1])
+    train_dataset, test_dataset = random_split(dataset, [0.95, 0.05])
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
     train_dataloader = DataLoader(
@@ -234,7 +235,7 @@ def train(config):
 if __name__ == '__main__':
     train(
         {
-            "batch_size": 4096 * 8,
-            "test_batch": 4096 * 32,
+            "batch_size": 4096 * 32,
+            "test_batch": 4096 * 64,
         }
     )

@@ -9,6 +9,7 @@
 #include "nnue.h"
 #include "param.h"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <iostream>
@@ -116,6 +117,10 @@ namespace engine {
             m_is_stopped = false;
         }
 
+        void add(int ts) {
+            m_target = m_target + std::chrono::milliseconds(ts);
+        }
+
         void check() {
             if (m_is_stopped)
                 return;
@@ -142,6 +147,7 @@ namespace engine {
 
         int m_history[2][64][64];
         int m_lmr[50][100];
+        std::array<int, 6> m_lmp_margins;
         move m_killers[100][2];
         move m_counter[2][64][64];
 
@@ -179,6 +185,8 @@ namespace engine {
                     m_lmr[depth][move] = std::max(1, depth / 4) + move / 4;
                 }
             }
+
+            m_lmp_margins = {0, 8, 12, 16, 20, 24};
         }
 
         int nnue_evaluate() {
@@ -238,7 +246,6 @@ namespace engine {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
                     int vgap = abs(start.first - end.first);
-                    int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
                     bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
@@ -248,10 +255,10 @@ namespace engine {
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
                         score += param::base_score + param::end_move_score;
-                    } else if (vgap < 2 && hgap >= 2) {
+                    } else if (vgap == 0) {
                         score += 0;
                     } else {
-                        score += param::base_score + 20 * vgap + hgap;
+                        score += param::base_score + 20 * vgap;
                     }
                 } else if (move == m_killers[ply][0]) {
                     score += param::base_score + param::killer_move_score;
@@ -667,10 +674,20 @@ namespace engine {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
+                int explored_moves = i + 1;
                 push_nnue(move);
                 m_pos.push(move);
 
-                int explored_moves = i + 1;
+                // lmp
+                if (depth <= 5 && !is_pv_node && explored_moves > m_lmp_margins[depth] && !move.is_jump()) {
+                    bool tactical = m_pos.has_jumps();
+                    if (!tactical) {
+                        m_pos.pop(move);
+                        pop_nnue(move);
+                        continue;
+                    }
+                }
+
                 int score;
                 if (explored_moves == 1) {
                     score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
@@ -814,12 +831,15 @@ namespace engine {
             auto [red, blue] = init_nnue();
             m_nnue.init(red, blue);
 
+            bool extended = false;
+
             while (depth <= param::max_depth) {
                 pv_line.clear();
                 move null = move::null();
                 int score = negamax(depth, 0, alpha, beta, pv_line, null);
 
-                if (!pv_line.empty()) {
+                bool is_out = score <= alpha || score >= beta;
+                if (!pv_line.empty() && !is_out) {
                     best_move = pv_line[0];
                 }
 
@@ -843,9 +863,28 @@ namespace engine {
                 if (m_timer.m_is_stopped) {
                     break;
                 }
+
+                if (is_out) {
+                    alpha = -param::inf;
+                    beta = param::inf;
+
+                    // restart
+                    if (depth >= 6 && !extended) {
+                        m_timer.add(ts / 2);
+                        extended = true;
+                    }
+
+                    continue;
+                }
+
+
                 if (new_score != nullptr) {
                     *new_score = score;
                 }
+
+                alpha = score - 15 * 100;
+                beta = score + 15 * 100;
+
                 depth += 1;
             }
 
@@ -861,6 +900,7 @@ namespace engine {
         int m_depth = 1;
         int m_score = 0;
         computer m_computer;
+        std::vector<move> m_line;
 
         explicit analysis(computer &&computer)
             : m_computer(std::move(computer)) {
@@ -878,9 +918,9 @@ namespace engine {
 
             int alpha = -param::inf;
             int beta = param::inf;
-            std::vector<move> pv_line;
+            m_line.clear();
             move null = move::null();
-            int score = m_computer.negamax(m_depth, 0, alpha, beta, pv_line, null);
+            int score = m_computer.negamax(m_depth, 0, alpha, beta, m_line, null);
             if (m_computer.m_timer.m_is_stopped) {
                 return m_score;
             }

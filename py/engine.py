@@ -5,7 +5,7 @@ import os
 
 def load_dll():
     dirname = os.path.dirname(__file__)
-    lib_file = os.path.join(dirname, "../cmake-build-release/libfrecker.so")
+    lib_file = os.path.join(dirname, "./binaries/libfrecker.so")
     cpp = ctypes.cdll.LoadLibrary(lib_file)
     return cpp
 

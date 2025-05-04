@@ -114,6 +114,22 @@ class V7(Engine):
         weights = os.path.join(dirname, './binaries/v7/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+class V71(Engine):
+    def __init__(self):
+        super().__init__(load_dll('v71/libfrecker.so'))
+
+        dirname = os.path.dirname(__file__)
+        weights = os.path.join(dirname, './binaries/v71/')
+        self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
+
+class V72(Engine):
+    def __init__(self):
+        super().__init__(load_dll('v72/libfrecker.so'))
+
+        dirname = os.path.dirname(__file__)
+        weights = os.path.join(dirname, './binaries/v72/')
+        self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
 
 
