@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 50
+    ts = 100
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
     pos = Pos()
 
     # random moves
-    left = 4
+    left = 5
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
         # if random.random() < 0.5:
@@ -62,7 +62,7 @@ def play(x):
 
 def round(agents, elos, names):
     n = len(agents)
-    k = 70
+    k = 20
 
     with multiprocessing.Pool(8) as p:
         matchups = []
@@ -99,8 +99,8 @@ def load_elos(agents):
     for agent in agents:
         if agent not in elos:
             elos[agent] = [1500] * best
-        else:
-            elos[agent][-1] += 500
+        # else:
+        #     elos[agent][-1] -= 500
 
     save_elos(elos)
     return elos
@@ -122,8 +122,8 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.Random, agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V72, agents.Latest]
-    names = ["random", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
+    agents = [agents.V4, agents.V5, agents.V62, agents.V72, agents.Latest]
+    names = [ "v4", "v5", "v6", "v7", "latest"]
 
     assert len(agents) == len(names)
     elos = load_elos(names)

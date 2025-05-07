@@ -119,6 +119,7 @@ namespace engine {
 
         void add(int ts) {
             m_target = m_target + std::chrono::milliseconds(ts);
+            m_is_stopped = false;
         }
 
         void check() {
@@ -191,35 +192,21 @@ namespace engine {
 
         int median_piece(uint64_t red, uint64_t blue) {
             int row = 0;
-            int count = 0;
             while (red > 0) {
                 int i = __builtin_ctzll(red);
                 red ^= 1ull << i;
 
-                count += 1;
-                if (count == 3 || count == 4) {
-                    row += i / 8;
-                }
-                if (count == 4) {
-                    break;
-                }
+                row += i / 8;
             }
 
-            count = 0;
             while (blue > 0) {
                 int i = __builtin_ctzll(blue);
                 blue ^= 1ull << i;
 
-                count += 1;
-                if (count == 3 || count == 4) {
-                    row += 7 - i / 8;
-                }
-                if (count == 4) {
-                    break;
-                }
+                row += 7 - i / 8;
             }
 
-            return row / (4 * 2);
+            return row / (2 * 6 * 2);
         }
 
 
@@ -680,11 +667,12 @@ namespace engine {
             }
 
             // null move pruning
-            if (do_null && !is_pv_node && depth >= 3) {
+            int remain = m_pos.num_unfinished_piece();
+            if (do_null && !is_pv_node && depth >= 3 && remain >= 3) {
                 move null = move::null();
                 m_pos.push(null);
 
-                int r = 3 + depth / 8;
+                int r = 3;
                 std::vector<move> child_pv_line;
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
                 m_pos.pop(null);
@@ -701,13 +689,18 @@ namespace engine {
             std::vector<move> child_pv_line;
 
             // internal ID
-            //            if (depth >= 5 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-            //                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
-            //                if (!child_pv_line.empty()) {
-            //                    tt_move = child_pv_line[0];
-            //                    child_pv_line.clear();
-            //                }
-            //            }
+            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
+
+                if (m_timer.m_is_stopped) {
+                    return 0;
+                }
+
+                if (!child_pv_line.empty()) {
+                    tt_move = child_pv_line[0];
+                    child_pv_line.clear();
+                }
+            }
 
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
@@ -894,7 +887,7 @@ namespace engine {
                 int score = negamax(depth, 0, alpha, beta, pv_line, null);
 
                 bool is_out = score <= alpha || score >= beta;
-                if (!pv_line.empty() && !is_out) {
+                if (!pv_line.empty() && ((m_timer.m_is_stopped) || !is_out)) {
                     best_move = pv_line[0];
                 }
 
@@ -915,6 +908,7 @@ namespace engine {
                     last_searched = m_searched;
                 }
 
+
                 if (m_timer.m_is_stopped) {
                     break;
                 }
@@ -925,7 +919,7 @@ namespace engine {
 
                     // restart
                     if (depth >= 6 && !extended) {
-                        m_timer.add(ts / 4);
+                        m_timer.add(ts / 2);
                         extended = true;
                     }
 
@@ -937,8 +931,8 @@ namespace engine {
                     *new_score = score;
                 }
 
-                alpha = score - 4 * 100;
-                beta = score + 4 * 100;
+                alpha = score - 5 * 100;
+                beta = score + 5 * 100;
 
                 depth += 1;
             }

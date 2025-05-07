@@ -61,23 +61,17 @@ def make_inputs(position: tuple[int, int, int, int, int]):
 def average_row(red, blue):
     # median row
     rows = 0
-    i = 0
     for row in range(8):
         for col in range(8):
             if red[row * 8 + col]:
-                i += 1
-                if i == 3 or i == 4:
-                    rows += row
+                rows += row
 
-    i = 0
     for row in range(8):
         for col in range(8):
             if blue[row * 8 + col]:
-                i += 1
-                if i == 3 or i == 4:
-                    rows += 7-row
+                rows += 7 - row
 
-    return rows // (4*2)
+    return rows // (2*6*2)
 
 def display_board(mask):
     for row in range(8):
@@ -101,8 +95,8 @@ class FreckersDataset(Dataset):
 
             # if not (os.path.basename(file).startswith(pk_file)):
             #     continue
-            if "v0" in file or "v1" in file or "v2" in file:
-                continue
+            # if "v0" in file or "v1" in file:
+            #     continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
 
@@ -139,11 +133,11 @@ class FreckersDataset(Dataset):
                 assert 0 <= avg <= 3
                 pst.append([avg])
 
-                pos.of(positions[0], positions[1], positions[2], turn, 0)
-                if pos.has_jumps:
-                    # skip jump positions
-                    pct += 1
-                    continue
+                # pos.of(positions[0], positions[1], positions[2], turn, 0)
+                # if pos.has_jumps:
+                #     # skip jump positions
+                #     pct += 1
+                #     continue
 
                 # eval should be for the moving player
                 eval = dataset.evals[i]
@@ -162,7 +156,7 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.6
+                lambda_ = 0.8
                 if eval > 10000:
                     normalized = 1
                 elif eval < -10000:
@@ -220,7 +214,7 @@ class FreckersNeuralNetwork(nn.Module):
         return x + pst
 
 def custom_loss(pred, y):
-    return torch.mean(torch.pow(torch.abs(pred-y), 2.4))
+    return torch.mean(torch.pow(torch.abs(pred-y), 2.6))
 
 def train(config):
     net = FreckersNeuralNetwork().to(device)
@@ -230,7 +224,7 @@ def train(config):
     scheduler = ReduceLROnPlateau(optimizer, 'min')
 
     dataset = FreckersDataset()
-    train_dataset, test_dataset = random_split(dataset, [0.90, 0.1])
+    train_dataset, test_dataset = random_split(dataset, [0.95, 0.05])
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
     train_dataloader = DataLoader(

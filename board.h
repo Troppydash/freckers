@@ -408,6 +408,8 @@ namespace board {
         // Constructor
         pos(mask mLilypads, mask red, mask blue, int mTurn, int mMoves) : m_lilypads(mLilypads), m_players{red, blue},
                                                                           m_turn(mTurn), m_moves(mMoves) {
+            m_lilypads |= m_players[0];
+            m_lilypads |= m_players[1];
             m_hasher.init(m_players[0], m_players[1], m_lilypads);
         }
 
