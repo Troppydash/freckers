@@ -13,14 +13,14 @@ namespace param {
     int alpha_flag = 1;
     int beta_flag = 2;
 
-    int max_depth = 40;
+    int max_depth = 60;
 
-    int base_score = (1 << 30);
+    int base_score = (1 << 20);
 
     int pv_move_score = 500;
-    int killer_move_score = 499;
-    int killer_move_score2 = 498;
-    int end_move_score = 497;
+    int killer_move_score = 480;
+    int killer_move_score2 = 470;
+    int end_move_score = 490;
 }
 
 

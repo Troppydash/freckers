@@ -16,7 +16,7 @@ import engine
 device = "cuda" if torch.cuda.is_available() else "cpu"
 input_size = 8 * 8 * 4
 pk_file = "session6"
-session = "session61"
+session = "session62"
 
 
 def bitmask_to_array(mask: int):
@@ -58,11 +58,41 @@ def make_inputs(position: tuple[int, int, int, int, int]):
     else:
         return out_blue + out_red
 
+def average_row(red, blue):
+    # median row
+    rows = 0
+    i = 0
+    for row in range(8):
+        for col in range(8):
+            if red[row * 8 + col]:
+                i += 1
+                if i == 3 or i == 4:
+                    rows += row
+
+    i = 0
+    for row in range(8):
+        for col in range(8):
+            if blue[row * 8 + col]:
+                i += 1
+                if i == 3 or i == 4:
+                    rows += 7-row
+
+    return rows // (4*2)
+
+def display_board(mask):
+    for row in range(8):
+        for col in range(8):
+            if mask[row * 8 + col]:
+                print("1", end='')
+            else:
+                print("_", end='')
+        print()
 
 class FreckersDataset(Dataset):
     def __init__(self):
         X = []
         y = []
+        pst = []
 
         pos = engine.Pos()
         for file in glob.glob(f'./sessions/{pk_file}/*.pk'):
@@ -71,8 +101,11 @@ class FreckersDataset(Dataset):
 
             # if not (os.path.basename(file).startswith(pk_file)):
             #     continue
+            if "v0" in file or "v1" in file or "v2" in file:
+                continue
 
             print(f'[dataset] loading {os.path.basename(file)}')
+
 
             try:
                 with open(file, 'rb') as f:
@@ -80,6 +113,7 @@ class FreckersDataset(Dataset):
             except Exception as e:
                 print(f'skipping: {e}')
                 continue
+
 
             pct = 0
             for i in range(len(dataset.positions)):
@@ -91,11 +125,25 @@ class FreckersDataset(Dataset):
                 turn = positions[3]
                 moves = positions[4]
 
-                # pos.of(positions[0], positions[1], positions[2], turn, 0)
-                # if pos.has_jumps:
-                #     # skip jump positions
-                #     pct += 1
-                #     continue
+                # avg_red = math.floor(average_row(red, blue))
+                # avg_blue = math.floor((3-average_row(blue)))
+                # assert 0 <= avg_red <= 3
+                # assert 0 <= avg_blue <= 3
+                avg = average_row(red, bitmask_to_array(positions[2]))
+                # if avg == 1:
+                #     print(avg)
+                #     display_board(red)
+                #     print()
+                #     display_board(blue)
+                #     print()
+                assert 0 <= avg <= 3
+                pst.append([avg])
+
+                pos.of(positions[0], positions[1], positions[2], turn, 0)
+                if pos.has_jumps:
+                    # skip jump positions
+                    pct += 1
+                    continue
 
                 # eval should be for the moving player
                 eval = dataset.evals[i]
@@ -114,58 +162,75 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
 
-                lambda_ = 0.8
+                lambda_ = 0.6
                 if eval > 10000:
                     normalized = 1
                 elif eval < -10000:
                     normalized = -1
                 else:
-                    normalized = 2 / (1 + math.exp(-eval / 1100)) - 1
+                    normalized = 2 / (1 + math.exp(-eval / 1000)) - 1
 
                 avg = lambda_ * score + (1 - lambda_) * normalized
+                assert -1 <= avg <= 1
                 y.append([avg])
 
+
             print(f"skipped {pct / len(dataset.positions) * 100:.2f}%")
+            # break
+
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
         self.y = torch.tensor(y, dtype=torch.float32)
+        self.pst = torch.tensor(pst, dtype=torch.long).reshape(-1, 1)
 
     def __len__(self):
         return len(self.y)
 
     def __getitem__(self, index):
-        return self.X[index, :], self.y[index]
+        return self.X[index, :], self.y[index], self.pst[index]
 
 
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8 * 8 * 2, 64, dtype=torch.float32)
-        self.layer2 = nn.Linear(64 * 2, 16, dtype=torch.float32)
-        self.layer3 = nn.Linear(16, 16, dtype=torch.float32)
+        self.layer1 = nn.Linear(8 * 8 * 2, 64+4, dtype=torch.float32)
+        self.layer2 = nn.Linear(64 * 2, 32, dtype=torch.float32)
+        self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
 
-    def forward(self, x):
+    def forward(self, x, indices):
         x = torch.flatten(x, 1)
         x1 = self.layer1(torch.concat((x[:, :64], x[:, 64:2 * 64]), dim=1))
         x2 = self.layer1(torch.concat((x[:, 2 * 64:3 * 64], x[:, 3 * 64:]), dim=1))
+
+        # make index
+        x1, x1_pst = torch.split(x1, x1.shape[1] - 4, dim=1)
+        x2, x2_pst = torch.split(x2, x2.shape[1] - 4, dim=1)
+        idx = indices[:, 0]
+        x1_pst = x1_pst.gather(1, idx.unsqueeze(1))
+        x2_pst = x2_pst.gather(1, idx.unsqueeze(1))
+
         x = F.relu(torch.concat((x1, x2), dim=1)).clamp(max=1)
         x = F.relu(self.layer2(x)).clamp(max=1)
         x = F.relu(self.layer3(x)).clamp(max=1)
         x = (self.layer4(x))
 
-        return x
+        pst = (x1_pst - x2_pst) / 2
 
+        return x + pst
+
+def custom_loss(pred, y):
+    return torch.mean(torch.pow(torch.abs(pred-y), 2.4))
 
 def train(config):
     net = FreckersNeuralNetwork().to(device)
 
-    criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=0.004, eps=1e-8)
+    criterion = custom_loss
+    optimizer = optim.AdamW(net.parameters(), lr=0.003, eps=1e-8)
     scheduler = ReduceLROnPlateau(optimizer, 'min')
 
     dataset = FreckersDataset()
-    train_dataset, test_dataset = random_split(dataset, [0.95, 0.05])
+    train_dataset, test_dataset = random_split(dataset, [0.90, 0.1])
     print(f'[train] train_dataset {len(train_dataset)}, using {device}')
 
     train_dataloader = DataLoader(
@@ -184,16 +249,16 @@ def train(config):
         net.train()
         running_loss = 0.0
         epoch_steps = 0
-        for i, (X, y) in enumerate(train_dataloader, 0):
-            X, y = X.to(device), y.to(device)
+        for i, (X, y, pst) in enumerate(train_dataloader, 0):
+            X, y, pst = X.to(device), y.to(device), pst.to(device)
             optimizer.zero_grad()
 
-            pred = net(X)
+            pred = net(X, pst)
             loss = criterion(pred, y)
             loss.backward()
             optimizer.step()
             for p in net.parameters():
-                p.data.clamp_(-2.0, 2.0)
+                p.data.clamp_(-1.96, 1.96)
 
             running_loss += loss.sum().item()
             epoch_steps += 1
@@ -208,10 +273,10 @@ def train(config):
         # validation
         test_loss = 0.0
         test_steps = 0
-        for i, (X, y) in enumerate(test_dataloader, 0):
-            X, y = X.to(device), y.to(device)
+        for i, (X, y, pst) in enumerate(test_dataloader, 0):
+            X, y, pst = X.to(device), y.to(device), pst.to(device)
             with torch.no_grad():
-                pred = net(X)
+                pred = net(X, pst)
                 test_loss += criterion(pred, y).sum().item()
                 test_steps += 1
 
@@ -224,7 +289,7 @@ def train(config):
         fig.savefig(f"loss/{session}_loss.png", bbox_inches="tight")
         plt.close(fig)
 
-        if epoch % 5 == 0:
+        if epoch % 2 == 0:
             torch.save(net.state_dict(), f"./models/{session}/model_{epoch}.pt")
 
         print(
@@ -235,7 +300,7 @@ def train(config):
 if __name__ == '__main__':
     train(
         {
-            "batch_size": 4096 * 32,
+            "batch_size": 4096 * 16,
             "test_batch": 4096 * 64,
         }
     )

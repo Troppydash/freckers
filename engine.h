@@ -157,7 +157,7 @@ namespace engine {
         endgame::a_star m_solver_blue;
 
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(128), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED), m_solver_blue(board::BLUE) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -189,8 +189,43 @@ namespace engine {
             m_lmp_margins = {0, 8, 12, 16, 20, 24};
         }
 
+        int median_piece(uint64_t red, uint64_t blue) {
+            int row = 0;
+            int count = 0;
+            while (red > 0) {
+                int i = __builtin_ctzll(red);
+                red ^= 1ull << i;
+
+                count += 1;
+                if (count == 3 || count == 4) {
+                    row += i / 8;
+                }
+                if (count == 4) {
+                    break;
+                }
+            }
+
+            count = 0;
+            while (blue > 0) {
+                int i = __builtin_ctzll(blue);
+                blue ^= 1ull << i;
+
+                count += 1;
+                if (count == 3 || count == 4) {
+                    row += 7 - i / 8;
+                }
+                if (count == 4) {
+                    break;
+                }
+            }
+
+            return row / (4 * 2);
+        }
+
+
         int nnue_evaluate() {
-            return m_nnue.compute(m_pos.m_turn == board::BLUE);
+            int idx = median_piece(m_pos.m_players[board::RED], m_pos.m_players[board::BLUE]);
+            return m_nnue.compute(m_pos.m_turn == board::BLUE, idx);
         }
 
         int classical_evaluate() {
@@ -230,8 +265,7 @@ namespace engine {
         }
 
         int evaluate() {
-            int tempo = 2;
-            return nnue_evaluate() + tempo * 100;
+            return nnue_evaluate() + 50;
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply, const move &prev_move) {
@@ -254,11 +288,11 @@ namespace engine {
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score;
+                        score += param::base_score + param::end_move_score + vgap;
                     } else if (vgap == 0) {
                         score += 0;
                     } else {
-                        score += param::base_score + 20 * vgap;
+                        score += param::base_score + vgap;
                     }
                 } else if (move == m_killers[ply][0]) {
                     score += param::base_score + param::killer_move_score;
@@ -268,13 +302,15 @@ namespace engine {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
                     bool is_red = m_pos.m_turn == board::RED;
+                    int vgap = abs(start.first - end.first);
+
                     bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score;
+                        score += param::base_score + param::end_move_score + vgap;
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
@@ -303,26 +339,26 @@ namespace engine {
         }
 
         void sort_scored_moves(std::vector<std::pair<int, int>> &scored_moves, int i) {
-            int best_score = scored_moves[i].first;
-            for (int j = i + 1; j < scored_moves.size(); ++j) {
-                if (scored_moves[j].first > best_score) {
-                    best_score = scored_moves[j].first;
-                    swap(scored_moves[i], scored_moves[j]);
-                }
-            }
-
             //            int best_score = scored_moves[i].first;
-            //            int best_index = i;
             //            for (int j = i + 1; j < scored_moves.size(); ++j) {
             //                if (scored_moves[j].first > best_score) {
             //                    best_score = scored_moves[j].first;
-            //                    best_index = j;
+            //                    swap(scored_moves[i], scored_moves[j]);
             //                }
             //            }
-            //
-            //            if (best_index != i) {
-            //                swap(scored_moves[i], scored_moves[best_index]);
-            //            }
+
+            int best_score = scored_moves[i].first;
+            int best_index = i;
+            for (int j = i + 1; j < scored_moves.size(); ++j) {
+                if (scored_moves[j].first > best_score) {
+                    best_score = scored_moves[j].first;
+                    best_index = j;
+                }
+            }
+
+            if (best_index != i) {
+                swap(scored_moves[i], scored_moves[best_index]);
+            }
         }
 
         void incr_counter(const move &prev_move, move &move) {
@@ -634,12 +670,21 @@ namespace engine {
                 return tt_score;
             }
 
+            // static null move pruning
+            if (!is_pv_node && abs(beta) < param::checkmate) {
+                int stat = evaluate();
+                int score_margin = depth * 200;
+                if ((stat - score_margin) >= beta) {
+                    return stat - score_margin;
+                }
+            }
+
             // null move pruning
-            if (do_null && !is_pv_node && depth >= 4 && m_pos.num_unfinished_piece() >= 4) {
+            if (do_null && !is_pv_node && depth >= 3) {
                 move null = move::null();
                 m_pos.push(null);
 
-                int r = 3;
+                int r = 3 + depth / 8;
                 std::vector<move> child_pv_line;
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
                 m_pos.pop(null);
@@ -653,6 +698,17 @@ namespace engine {
                 }
             }
 
+            std::vector<move> child_pv_line;
+
+            // internal ID
+            //            if (depth >= 5 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+            //                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
+            //                if (!child_pv_line.empty()) {
+            //                    tt_move = child_pv_line[0];
+            //                    child_pv_line.clear();
+            //                }
+            //            }
+
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
             std::vector<std::pair<int, int>> scored_moves;
@@ -665,7 +721,6 @@ namespace engine {
             }
 
 
-            std::vector<move> child_pv_line;
             int best_score = -param::inf;
             move best_move = move::null();
             int tt_flag = param::alpha_flag;
@@ -870,7 +925,7 @@ namespace engine {
 
                     // restart
                     if (depth >= 6 && !extended) {
-                        m_timer.add(ts / 2);
+                        m_timer.add(ts / 4);
                         extended = true;
                     }
 
@@ -882,8 +937,8 @@ namespace engine {
                     *new_score = score;
                 }
 
-                alpha = score - 15 * 100;
-                beta = score + 15 * 100;
+                alpha = score - 4 * 100;
+                beta = score + 4 * 100;
 
                 depth += 1;
             }

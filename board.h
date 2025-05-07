@@ -630,29 +630,13 @@ namespace board {
 
             std::vector<move> moves;
 
-            // first handle grow
             mask player = m_players[m_turn];
-            mask grown = bitboard::dilate(player);
-            grown &= ~m_lilypads;
-            moves.push_back(move{grown, 0, 0});
 
-            // then handle moves for each piece
             mask pieces = player;
             while (pieces > 0) {
                 // get piece mask
                 mask piece = 1ull << __builtin_ctzll(pieces);
                 pieces ^= piece;
-
-                // direct moves
-                mask direct = 0;
-                if (m_turn == RED) {
-                    direct = bitboard::dilate_down(piece);
-                } else {
-                    direct = bitboard::dilate_up(piece);
-                }
-                direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
-
-                move::from_mask(direct, piece, moves);
 
                 // jumps
                 mask obst = m_players[0] | m_players[1];
@@ -672,11 +656,34 @@ namespace board {
                     all_jumps |= new_jumps;
                 }
 
-
                 all_jumps ^= piece;
                 move::from_mask(all_jumps, piece, moves);
             }
 
+
+            // then handle moves for each piece
+            pieces = player;
+            while (pieces > 0) {
+                // get piece mask
+                mask piece = 1ull << __builtin_ctzll(pieces);
+                pieces ^= piece;
+
+                // direct moves
+                mask direct = 0;
+                if (m_turn == RED) {
+                    direct = bitboard::dilate_down(piece);
+                } else {
+                    direct = bitboard::dilate_up(piece);
+                }
+                direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
+
+                move::from_mask(direct, piece, moves);
+            }
+
+            // first handle grow
+            mask grown = bitboard::dilate(player);
+            grown &= ~m_lilypads;
+            moves.push_back(move{grown, 0, 0});
 
             return moves;
         }

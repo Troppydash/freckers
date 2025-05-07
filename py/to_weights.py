@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-base = './models/session61/'
-file = f"{base}model_35.pt"
+base = './models/session62/'
+file = f"{base}model_54.pt"
 model = torch.load(file)
 
 parameters = {}

@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 50
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
     pos = Pos()
 
     # random moves
-    left = 5
+    left = 4
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
         # if random.random() < 0.5:
@@ -62,9 +62,9 @@ def play(x):
 
 def round(agents, elos, names):
     n = len(agents)
-    k = 32
+    k = 70
 
-    with multiprocessing.Pool(4) as p:
+    with multiprocessing.Pool(8) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -76,6 +76,7 @@ def round(agents, elos, names):
 
     for i, j, scores in results:
         # update result
+        print(f"{names[i]} vs {names[j]}: {scores}")
         probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
         probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
         elos[names[i]].append(max(400, elos[names[i]][-1] + k * (scores[0] / 2 - probi)))
@@ -97,7 +98,9 @@ def load_elos(agents):
 
     for agent in agents:
         if agent not in elos:
-            elos[agent] = [1000] * best
+            elos[agent] = [1500] * best
+        else:
+            elos[agent][-1] += 500
 
     save_elos(elos)
     return elos
@@ -119,11 +122,9 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.Random, agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V72]
-    names = ["random", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7"]
+    agents = [agents.Random, agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V72, agents.Latest]
+    names = ["random", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
 
-    # agents = [agents.V5, agents.V6, agents.V62, agents.V7, agents.V71, agents.Latest]
-    # names = ["v5", "v6", "v6.2", "v7", "v71", "latest"]
     assert len(agents) == len(names)
     elos = load_elos(names)
     # plot_elos(elos)

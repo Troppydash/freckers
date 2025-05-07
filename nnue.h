@@ -18,7 +18,7 @@
 
 namespace nnue {
     constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>(1 << 6);
-    constexpr int16_t WEIGHT16_SCALE = static_cast<int16_t>(1 << 12);
+    constexpr int16_t WEIGHT16_SCALE = static_cast<int16_t>(WEIGHT8_SCALE * WEIGHT8_SCALE);
     constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
@@ -78,13 +78,13 @@ namespace nnue {
                 for (int i = 0; i < m_inputs * m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_weights.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
+                    m_weights.push_back(static_cast<int16_t>(round(std::min(1.9, std::max(-1.9, tmp)) * WEIGHT8_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_biases.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT16_SCALE)));
+                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.9, std::max(-1.9, tmp)) * WEIGHT16_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
@@ -252,19 +252,20 @@ namespace nnue {
         AlignedVector<int16_t> m_accum_output;
 
         // caching
+        int16_t m_last_pst;
         bool m_changed;
         int m_last_flip;
 
 
         explicit seq(std::vector<std::string> &weights)
             : m_red_accum{weights[0]}, m_blue_accum{weights[0]},
-              m_relu1{m_red_accum.m_outputs + m_blue_accum.m_outputs},
+              m_relu1{m_red_accum.m_outputs - 4 + m_blue_accum.m_outputs - 4},
               m_layer2{weights[1]},
               m_relu2{m_layer2.m_outputs},
               m_layer3{weights[2]},
               m_relu3{m_layer3.m_outputs},
               m_layer4{weights[3]},
-              m_accum_output(m_red_accum.m_outputs + m_blue_accum.m_outputs, 0) {
+              m_accum_output(m_red_accum.m_outputs - 4 + m_blue_accum.m_outputs - 4, 0) {
             m_changed = true;
             m_last_flip = -1;
             set_changed();
@@ -300,13 +301,13 @@ namespace nnue {
             return m_changed || m_last_flip != flip;
         }
 
-        int compute(int flip) {
+        int compute(int flip, int idx) {
             if (is_changed(flip)) {
-                size_t offset = m_red_accum.m_outputs;
+                size_t offset = m_red_accum.m_outputs - 4;
                 size_t blue_offset = (1 - flip) * offset;
                 size_t red_offset = flip * offset;
 
-                for (int i = 0; i < m_red_accum.m_outputs; ++i) {
+                for (int i = 0; i < offset; ++i) {
                     m_accum_output[red_offset + i] = m_red_accum.m_output[i];
                 }
                 //                {
@@ -320,7 +321,7 @@ namespace nnue {
                 //                    }
                 //                }
 
-                for (int i = 0; i < m_blue_accum.m_outputs; ++i) {
+                for (int i = 0; i < offset; ++i) {
                     m_accum_output[blue_offset + i] = m_blue_accum.m_output[i];
                 }
                 //                {
@@ -334,6 +335,13 @@ namespace nnue {
                 //                    }
                 //                }
 
+                int16_t red_pst = m_red_accum.m_output[m_red_accum.m_outputs - 4 + idx];
+                int16_t blue_pst = m_blue_accum.m_output[m_blue_accum.m_outputs - 4 + idx];
+                if (flip) {
+                    m_last_pst = (blue_pst - red_pst);
+                } else {
+                    m_last_pst = (red_pst - blue_pst);
+                }
 
                 m_relu1.forward(m_accum_output);
                 m_layer2.forward(m_relu1.m_output);
@@ -346,7 +354,8 @@ namespace nnue {
             }
 
             int eval = static_cast<int>(m_layer4.m_output[0]);
-            return (eval * 40 * 100) / WEIGHT8_SCALE;
+            return (eval * 40 * 100 + static_cast<int>(m_last_pst) * 40 * 100 / 2) / WEIGHT8_SCALE;
+//            return (eval * 80 * 100 + static_cast<int>(m_last_pst) * 80 * 100 / 2) / WEIGHT8_SCALE - 40 * 100;
         }
 
         void push_red(int idx) {

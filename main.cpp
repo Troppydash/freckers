@@ -81,6 +81,18 @@ int ponder_depth(int handle) {
     return instances[handle].analysis->m_depth;
 }
 
+uint64_t ponder_start(int handle) {
+    return instances[handle].analysis->m_line[0].m_start;
+}
+
+uint64_t ponder_end(int handle) {
+    return instances[handle].analysis->m_line[0].m_end;
+}
+
+uint64_t ponder_grow(int handle) {
+    return instances[handle].analysis->m_line[0].m_grow;
+}
+
 int get_last_score(int handle) {
     return instances[handle].last_score;
 }
