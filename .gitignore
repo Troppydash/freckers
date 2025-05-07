@@ -1,6 +1,5 @@
 .idea
 cmake-build-release
 cmake-build-debug
-weights
 perf/FlameGraph/
 wasm
