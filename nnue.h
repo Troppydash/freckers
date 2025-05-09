@@ -18,7 +18,7 @@
 
 namespace nnue {
     constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>(1 << 6);
-    constexpr int16_t WEIGHT16_SCALE = static_cast<int16_t>(WEIGHT8_SCALE * WEIGHT8_SCALE);
+    constexpr int16_t WEIGHT16_SCALE = static_cast<int16_t>(1 << 12);
     constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
@@ -78,13 +78,13 @@ namespace nnue {
                 for (int i = 0; i < m_inputs * m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_weights.push_back(static_cast<int16_t>(round(std::min(1.9, std::max(-1.9, tmp)) * WEIGHT8_SCALE)));
+                    m_weights.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT8_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.9, std::max(-1.9, tmp)) * WEIGHT16_SCALE)));
+                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT16_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
@@ -252,7 +252,7 @@ namespace nnue {
         AlignedVector<int16_t> m_accum_output;
 
         // caching
-        int16_t m_last_pst;
+        int32_t m_last_pst;
         bool m_changed;
         int m_last_flip;
 
@@ -335,8 +335,8 @@ namespace nnue {
                 //                    }
                 //                }
 
-                int16_t red_pst = m_red_accum.m_output[m_red_accum.m_outputs - 4 + idx];
-                int16_t blue_pst = m_blue_accum.m_output[m_blue_accum.m_outputs - 4 + idx];
+                int32_t red_pst = m_red_accum.m_output[m_red_accum.m_outputs - 4 + idx];
+                int32_t blue_pst = m_blue_accum.m_output[m_blue_accum.m_outputs - 4 + idx];
                 if (flip) {
                     m_last_pst = (blue_pst - red_pst);
                 } else {
@@ -355,7 +355,6 @@ namespace nnue {
 
             int eval = static_cast<int>(m_layer4.m_output[0]);
             return (eval * 40 * 100 + static_cast<int>(m_last_pst) * 40 * 100 / 2) / WEIGHT8_SCALE;
-//            return (eval * 80 * 100 + static_cast<int>(m_last_pst) * 80 * 100 / 2) / WEIGHT8_SCALE - 40 * 100;
         }
 
         void push_red(int idx) {

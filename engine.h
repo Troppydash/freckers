@@ -544,81 +544,6 @@ namespace engine {
             return best_score;
         }
 
-        bool handle_crossed(int &score, int &turns, int depth, int ply, std::vector<move> &pv_line) {
-            int results[2] = {0, 0};
-            board::move best_red_move = board::move::null();
-            board::move best_blue_move = board::move::null();
-            m_solver_red.reset(depth);
-            m_solver_blue.reset(depth);
-
-            // use heuristic to find who is first
-            if (endgame::heuristic(m_pos, board::RED) > endgame::heuristic(m_pos, board::BLUE)) {
-                results[0] = m_solver_red.search(m_pos, best_red_move);
-                if (results[0] == -1) {
-                    return false;
-                }
-
-                m_timer.check();
-                if (m_timer.m_is_stopped) {
-                    return false;
-                }
-
-                m_solver_blue.m_best_depth = results[0];
-                results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                if (results[1] == -1) {
-                    return false;
-                }
-            } else {
-                results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                if (results[1] == -1) {
-                    return false;
-                }
-
-                m_timer.check();
-                if (m_timer.m_is_stopped) {
-                    return false;
-                }
-
-                m_solver_red.m_best_depth = results[1];
-                results[0] = m_solver_red.search(m_pos, best_red_move);
-                if (results[0] == -1) {
-                    return false;
-                }
-            }
-
-            m_timer.check();
-            if (m_timer.m_is_stopped) {
-                return false;
-            }
-
-            // todo: this might push_back null
-            //            if (m_pos.m_turn == board::RED) {
-            //                pv_line.push_back(best_red_move);
-            //            } else {
-            //                pv_line.push_back(best_blue_move);
-            //            }
-
-            if (m_pos.m_turn == board::RED) {
-                if (results[board::BLUE] < results[board::RED]) {
-                    turns = results[board::BLUE] * 2;
-                    score = -param::inf + ply + turns;
-                } else {
-                    turns = results[board::RED] * 2 - 1;
-                    score = param::inf - ply - turns;
-                }
-            } else {
-                if (results[board::RED] < results[board::BLUE]) {
-                    turns = results[board::RED] * 2;
-                    score = -param::inf + ply + turns;
-                } else {
-                    turns = results[board::BLUE] * 2 - 1;
-                    score = param::inf - ply - turns;
-                }
-            }
-
-            return true;
-        }
-
 
         int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, const move &prev_move, bool do_null = true) {
             m_searched += 1;
@@ -658,13 +583,13 @@ namespace engine {
             }
 
             // static null move pruning
-            if (!is_pv_node && abs(beta) < param::checkmate) {
-                int stat = evaluate();
-                int score_margin = depth * 200;
-                if ((stat - score_margin) >= beta) {
-                    return stat - score_margin;
-                }
-            }
+//            if (!is_pv_node && abs(beta) < param::checkmate) {
+//                int stat = evaluate();
+//                int score_margin = depth * 200;
+//                if ((stat - score_margin) >= beta) {
+//                    return stat - score_margin;
+//                }
+//            }
 
             // null move pruning
             int remain = m_pos.num_unfinished_piece();
@@ -689,18 +614,18 @@ namespace engine {
             std::vector<move> child_pv_line;
 
             // internal ID
-            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
-
-                if (m_timer.m_is_stopped) {
-                    return 0;
-                }
-
-                if (!child_pv_line.empty()) {
-                    tt_move = child_pv_line[0];
-                    child_pv_line.clear();
-                }
-            }
+//            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+//                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
+//
+//                if (m_timer.m_is_stopped) {
+//                    return 0;
+//                }
+//
+//                if (!child_pv_line.empty()) {
+//                    tt_move = child_pv_line[0];
+//                    child_pv_line.clear();
+//                }
+//            }
 
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
@@ -886,10 +811,17 @@ namespace engine {
                 move null = move::null();
                 int score = negamax(depth, 0, alpha, beta, pv_line, null);
 
-                bool is_out = score <= alpha || score >= beta;
-                if (!pv_line.empty() && ((m_timer.m_is_stopped) || !is_out)) {
-                    best_move = pv_line[0];
+                bool ok = alpha < score && score < beta;
+                if (!pv_line.empty()) {
+                    if (m_timer.m_is_stopped) {
+                        if (alpha != -param::inf) {
+                            best_move = pv_line[0];
+                        }
+                    } else if (ok) {
+                        best_move = pv_line[0];
+                    }
                 }
+
 
                 if (verbose) {
                     std::chrono::milliseconds now = m_timer.now();
@@ -913,7 +845,7 @@ namespace engine {
                     break;
                 }
 
-                if (is_out) {
+                if (!ok) {
                     alpha = -param::inf;
                     beta = param::inf;
 
@@ -931,8 +863,8 @@ namespace engine {
                     *new_score = score;
                 }
 
-                alpha = score - 5 * 100;
-                beta = score + 5 * 100;
+//                alpha = score - 5 * 100;
+//                beta = score + 5 * 100;
 
                 depth += 1;
             }
