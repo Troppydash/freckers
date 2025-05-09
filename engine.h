@@ -158,7 +158,7 @@ namespace engine {
         endgame::a_star m_solver_blue;
 
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(64), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+            : m_tt(512), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED), m_solver_blue(board::BLUE) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -275,7 +275,7 @@ namespace engine {
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score + vgap;
+                        score += param::base_score + param::end_move_score;
                     } else if (vgap == 0) {
                         score += 0;
                     } else {
@@ -297,7 +297,7 @@ namespace engine {
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score + vgap;
+                        score += param::base_score / 2 + param::end_move_score;
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
@@ -583,17 +583,17 @@ namespace engine {
             }
 
             // static null move pruning
-//            if (!is_pv_node && abs(beta) < param::checkmate) {
-//                int stat = evaluate();
-//                int score_margin = depth * 200;
-//                if ((stat - score_margin) >= beta) {
-//                    return stat - score_margin;
-//                }
-//            }
+            if (!is_pv_node && abs(beta) < param::checkmate) {
+                int stat = evaluate();
+                int score_margin = depth * 400;
+                if ((stat - score_margin) >= beta) {
+                    return stat - score_margin;
+                }
+            }
 
             // null move pruning
             int remain = m_pos.num_unfinished_piece();
-            if (do_null && !is_pv_node && depth >= 3 && remain >= 3) {
+            if (do_null && !is_pv_node && depth >= 3 && remain > 2) {
                 move null = move::null();
                 m_pos.push(null);
 
@@ -863,8 +863,8 @@ namespace engine {
                     *new_score = score;
                 }
 
-//                alpha = score - 5 * 100;
-//                beta = score + 5 * 100;
+                alpha = score - 5 * 100;
+                beta = score + 5 * 100;
 
                 depth += 1;
             }
