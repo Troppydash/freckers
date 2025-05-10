@@ -269,7 +269,7 @@ namespace engine {
                     int vgap = abs(start.first - end.first);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 3;
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
@@ -291,7 +291,7 @@ namespace engine {
                     bool is_red = m_pos.m_turn == board::RED;
                     int vgap = abs(start.first - end.first);
 
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 4;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 3;
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
