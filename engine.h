@@ -13,7 +13,9 @@
 #include <chrono>
 #include <cinttypes>
 #include <iostream>
+#include <random>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace engine {
@@ -138,6 +140,114 @@ namespace engine {
         }
     };
 
+    class computer_config {
+    public:
+        std::array<int, 6> m_lmp_margins{};
+        int m_lmr_depth;
+        int m_lmr_move;
+        int m_tempo;
+
+        int m_countermove;
+        int m_lily_min;
+        int m_lily_scale;
+        int m_static_null_move_margin;
+        int m_window;
+
+        computer_config() {
+            m_lmp_margins = {0, 5, 13, 14, 18, 25};
+            m_lmr_depth = 3;
+            m_lmr_move = 7;
+            m_tempo = 55;
+            m_static_null_move_margin = 390;
+            m_countermove = 5;
+            m_lily_min = 3;
+            m_lily_scale = 8;
+            m_window = 4;
+        }
+
+
+        void change(std::mt19937_64 &rng) {
+            std::uniform_int_distribution<int> dist(2, 6 + 3 + 4 + 1);
+            std::uniform_int_distribution<int> perb(0, 1);
+            int value = dist(rng);
+            int per = perb(rng) * 2 - 1;
+            std::cout << value << std::endl;
+            if (value <= 6) {
+                m_lmp_margins[value - 1] += per;
+            } else if (value == 7) {
+                m_lmr_depth += per;
+            } else if (value == 8) {
+                m_lmr_move += per;
+            } else if (value == 9) {
+                m_tempo += 2 * per;
+            } else if (value == 10) {
+                m_static_null_move_margin += 10 * per;
+            } else if (value == 11) {
+                m_countermove += 2 * per;
+            } else if (value == 12) {
+                m_lily_min += per;
+            } else if (value == 13) {
+                m_lily_scale += 1 * per;
+            } else if (value == 14) {
+                m_window += per;
+            }
+        }
+
+        void display() {
+            std::cout << "LMP_MARGIN ";
+            for (auto m: m_lmp_margins) {
+                std::cout << m << " ";
+            }
+            std::cout << std::endl;
+            std::cout << "LMR " << m_lmr_depth << " " << m_lmr_move << std::endl;
+            std::cout << "TEMP " << m_tempo << std::endl;
+            std::cout << "Static " << m_static_null_move_margin << std::endl;
+            std::cout << "Counter " << m_countermove << std::endl;
+            std::cout << "Lily " << m_lily_min << " " << m_lily_scale << std::endl;
+            std::cout << "Window " << m_window << std::endl;
+        }
+
+        bool operator<(const computer_config &other) const {
+            if (m_countermove < other.m_countermove) {
+                return true;
+            }
+
+            if (m_lmp_margins < other.m_lmp_margins) {
+                return true;
+            }
+
+            if (m_lily_scale < other.m_lily_scale) {
+                return true;
+            }
+
+            if (m_lmr_depth < other.m_lmr_depth) {
+                return true;
+            }
+
+            if (m_window < other.m_window) {
+                return true;
+            }
+
+            if (m_static_null_move_margin < other.m_static_null_move_margin) {
+                return true;
+            }
+
+            if (m_lily_min < other.m_lily_min) {
+                return true;
+            }
+
+            if (m_lmr_move < other.m_lmr_move) {
+                return true;
+            }
+
+            if (m_tempo < other.m_tempo) {
+                return true;
+            }
+
+            return false;
+        }
+    };
+
     class computer {
     public:
         table m_tt;
@@ -157,9 +267,15 @@ namespace engine {
         endgame::a_star m_solver_red;
         endgame::a_star m_solver_blue;
 
+        computer_config m_config;
+
         explicit computer(pos pos, std::vector<std::string> weights)
-            : m_tt(512), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
-              m_solver_red(board::RED), m_solver_blue(board::BLUE) {
+            : computer(pos, std::move(weights), computer_config()) {}
+
+
+        explicit computer(pos pos, std::vector<std::string> weights, computer_config config)
+            : m_tt(32), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+              m_solver_red(board::RED), m_solver_blue(board::BLUE), m_config(config) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
@@ -183,11 +299,11 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / 4) + move / 4;
+                    m_lmr[depth][move] = std::max(1, depth / std::max(1,m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
                 }
             }
 
-            m_lmp_margins = {0, 8, 12, 16, 20, 24};
+            m_lmp_margins = m_config.m_lmp_margins;
         }
 
         int median_piece(uint64_t red, uint64_t blue) {
@@ -248,11 +364,11 @@ namespace engine {
                 distance_heuristic = (blue_total - red_total) * 100;
             }
 
-            return distance_heuristic + 100;
+            return distance_heuristic;
         }
 
         int evaluate() {
-            return nnue_evaluate() + 50;
+            return nnue_evaluate() + m_config.m_tempo;
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply, const move &prev_move) {
@@ -302,7 +418,7 @@ namespace engine {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
                             if (move == m_counter[m_pos.m_turn][coord.first][coord.second]) {
-                                score += 10;
+                                score += m_config.m_countermove;
                             }
                         }
 
@@ -312,10 +428,10 @@ namespace engine {
                     }
                 } else {
                     int count = __builtin_popcountll(move.m_grow);
-                    if (count <= 1) {
+                    if (count <= m_config.m_lily_min) {
                         score -= 10;
                     } else {
-                        score += count * 10;
+                        score += count * m_config.m_lily_scale;
                     }
                 }
 
@@ -544,6 +660,75 @@ namespace engine {
             return best_score;
         }
 
+        bool handle_crossed(int &score, int &turns, int depth, int ply, std::vector<move> &pv_line) {
+            int results[2] = {0, 0};
+            board::move best_red_move = board::move::null();
+            board::move best_blue_move = board::move::null();
+            m_solver_red.reset(depth);
+            m_solver_blue.reset(depth);
+
+            // use heuristic to find who is first
+            int winning = evaluate() > 0 ? m_pos.m_turn : 1 - m_pos.m_turn;
+            if (winning == RED) {
+                results[0] = m_solver_red.search(m_pos, best_red_move);
+                if (results[0] == -1) {
+                    return false;
+                }
+
+                m_timer.check();
+                if (m_timer.m_is_stopped) {
+                    return false;
+                }
+
+                m_solver_blue.m_best_depth = results[0];
+                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+                if (results[1] == -1) {
+                    return false;
+                }
+            } else {
+                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+                if (results[1] == -1) {
+                    return false;
+                }
+
+                m_timer.check();
+                if (m_timer.m_is_stopped) {
+                    return false;
+                }
+
+                m_solver_red.m_best_depth = results[1];
+                results[0] = m_solver_red.search(m_pos, best_red_move);
+                if (results[0] == -1) {
+                    return false;
+                }
+            }
+
+            m_timer.check();
+            if (m_timer.m_is_stopped) {
+                return false;
+            }
+
+            if (m_pos.m_turn == board::RED) {
+                if (results[board::BLUE] < results[board::RED]) {
+                    turns = results[board::BLUE] * 2;
+                    score = -param::inf + ply + turns;
+                } else {
+                    turns = results[board::RED] * 2 - 1;
+                    score = param::inf - ply - turns;
+                }
+            } else {
+                if (results[board::RED] < results[board::BLUE]) {
+                    turns = results[board::RED] * 2;
+                    score = -param::inf + ply + turns;
+                } else {
+                    turns = results[board::BLUE] * 2 - 1;
+                    score = param::inf - ply - turns;
+                }
+            }
+
+            return true;
+        }
+
 
         int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, const move &prev_move, bool do_null = true) {
             m_searched += 1;
@@ -582,10 +767,26 @@ namespace engine {
                 return tt_score;
             }
 
+
+            //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 7 && abs(evaluate()) <= 10 * 100) {
+            //                int best_score = 0;
+            //                int turns = 0;
+            //                bool ok = handle_crossed(best_score, turns, depth, ply, pv_line);
+            //                m_astar_searched += m_solver_red.m_counter + m_solver_blue.m_counter;
+            //
+            //                if (ok) {
+            //                    move null = move::null();
+            //                    entry.set(m_pos, m_pos.hash(), best_score, null, ply, 1e9, param::exact_flag);
+            //
+            //                    return best_score;
+            //                }
+            //            }
+
+
             // static null move pruning
-            if (!is_pv_node && abs(beta) < param::checkmate) {
+            if (!is_pv_node && abs(beta) < param::checkmate && !m_pos.has_jumps()) {
                 int stat = evaluate();
-                int score_margin = depth * 400;
+                int score_margin = depth * m_config.m_static_null_move_margin;
                 if ((stat - score_margin) >= beta) {
                     return stat - score_margin;
                 }
@@ -593,7 +794,8 @@ namespace engine {
 
             // null move pruning
             int remain = m_pos.num_unfinished_piece();
-            if (do_null && !is_pv_node && depth >= 3 && remain > 2) {
+            int growth_count = m_pos.growth_count();
+            if (do_null && !is_pv_node && depth >= 2 && remain > 2 && growth_count <= 8) {
                 move null = move::null();
                 m_pos.push(null);
 
@@ -614,18 +816,18 @@ namespace engine {
             std::vector<move> child_pv_line;
 
             // internal ID
-//            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-//                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
-//
-//                if (m_timer.m_is_stopped) {
-//                    return 0;
-//                }
-//
-//                if (!child_pv_line.empty()) {
-//                    tt_move = child_pv_line[0];
-//                    child_pv_line.clear();
-//                }
-//            }
+            //            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+            //                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
+            //
+            //                if (m_timer.m_is_stopped) {
+            //                    return 0;
+            //                }
+            //
+            //                if (!child_pv_line.empty()) {
+            //                    tt_move = child_pv_line[0];
+            //                    child_pv_line.clear();
+            //                }
+            //            }
 
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
@@ -789,7 +991,36 @@ namespace engine {
             return {red, blue};
         }
 
-        move search(int ts, int *new_score, bool verbose) {
+        void reset(board::pos position) {
+            m_pos = position;
+            for (auto &i: m_history) {
+                for (auto &j: i) {
+                    for (int &k: j) {
+                        k = 0;
+                    }
+                }
+            }
+
+            for (auto &m: m_killers) {
+                m[0] = move::null();
+                m[1] = move::null();
+            }
+
+            for (auto &i: m_counter) {
+                for (auto &j: i) {
+                    for (auto &k: j) {
+                        k = move::null();
+                    }
+                }
+            }
+
+            // reset tt
+            for (auto &entry: m_tt.m_entries) {
+                entry.m_hash = 0;
+            }
+        }
+
+        move search(int ts, int *new_score, bool verbose, int max_depth = param::max_depth) {
             move best_move = move::null();
             int alpha = -param::inf;
             int beta = param::inf;
@@ -797,6 +1028,8 @@ namespace engine {
             int depth = 1;
 
             m_timer.start(ts);
+
+            m_searched = 0;
 
             std::chrono::milliseconds last = m_timer.now();
             int last_searched = m_searched;
@@ -806,7 +1039,7 @@ namespace engine {
 
             bool extended = false;
 
-            while (depth <= param::max_depth) {
+            while (depth <= max_depth) {
                 pv_line.clear();
                 move null = move::null();
                 int score = negamax(depth, 0, alpha, beta, pv_line, null);
@@ -863,8 +1096,8 @@ namespace engine {
                     *new_score = score;
                 }
 
-                alpha = score - 5 * 100;
-                beta = score + 5 * 100;
+                alpha = score - m_config.m_window * 100;
+                beta = score + m_config.m_window * 100;
 
                 depth += 1;
             }

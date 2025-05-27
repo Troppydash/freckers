@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <immintrin.h>
 #include <iostream>
 #include <string>
 #include <unordered_map>

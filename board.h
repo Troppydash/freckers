@@ -588,6 +588,14 @@ namespace board {
                    __builtin_popcountll(m_players[BLUE] & bitboard::TOP);
         }
 
+        int growth_count() {
+            mask player = m_players[m_turn];
+            mask grown = bitboard::dilate(player);
+            grown &= ~m_lilypads;
+            return __builtin_popcountll(grown);
+        }
+
+
         std::vector<move> get_piece_moves(mask piece) const {
             std::vector<move> moves;
 

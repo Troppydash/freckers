@@ -14,39 +14,10 @@
 #include <utility>
 
 namespace endgame {
-    int heuristic_one(board::pos &pos, int side, board::mask piece) {
-        if (piece & board::bitboard::ENDS[side]) {
-            return 0;
-        }
-
-        for (auto m: pos.get_piece_moves(piece)) {
-            if (m.m_end & board::bitboard::ENDS[side]) {
-                return 1;
-            }
-        }
-
-//        if (side == board::RED) {
-//            int row = __builtin_ctzll(piece) / 8;
-//            board::mask mask = board::bitboard::ALL << (8 * (row + 1));
-//            if ((pos.m_players[side] & mask) == 0) {
-//                return std::max(2, 7-row);
-//            }
-//        }
-
-        return 2;
-    }
-
     int heuristic(board::pos &pos, int side) {
-        board::mask mask = pos.m_players[side];
-        int total = 0;
-        while (mask > 0) {
-            board::mask piece = 1ull << __builtin_ctzll(mask);
-            mask ^= piece;
-
-            total += heuristic_one(pos, side, piece);
-        }
-
-        return total;
+        // count number at the end
+        int count = __builtin_popcountll(pos.m_players[side] & board::bitboard::ENDS[side]);
+        return 6 - count;
     }
 
     struct node {

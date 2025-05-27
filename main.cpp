@@ -1,10 +1,13 @@
 #include "board.h"
 #include "endgame.h"
 #include "engine.h"
+
+#include <atomic>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <optional>
+#include <thread>
 
 std::vector<std::string> get_weights(const std::string &base) {
     return {base + "./weights/weight_1.txt", base + "./weights/weight_2.txt", base + "./weights/weight_3.txt", base + "./weights/weight_4.txt"};
@@ -55,6 +58,7 @@ void play_board(int handle, int ts, int verbose) {
     engine::computer engine{instances[handle].last_pos, get_weights_direct(instances[handle].weights)};
     instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
 }
+
 
 void start_ponder(int handle) {
     if (instances[handle].analysis != nullptr) {
@@ -254,10 +258,156 @@ void test_a_star_position() {
     }
 }
 
+// TODO: export engine weights, and allow python to use engine weights
+// Implement texel tuning using it
+
+
+double score_config(engine::computer_config config, std::vector<std::pair<board::pos, double>> positions) {
+    double total = 0;
+    int counter = 0;
+    engine::computer computer{positions[0].first, get_weights("../"), config};
+
+    std::cout << std::endl;
+    for (auto &[position, eval]: positions) {
+        int estimated_seconds = (positions.size() - counter) * 20 / 1000;
+        std::cout << "\r" << counter << " estimated " << estimated_seconds << " seconds" << std::flush;
+        counter += 1;
+
+        // compute engine
+        int score = 0;
+        computer.reset(position);
+        computer.search(5000, &score, false, 6);
+
+        // map score to logistic score
+        double logistic_score = 2.0 / (1.0 + exp(-score / 1000.0)) - 1.0;
+        if (score > param::checkmate) {
+            logistic_score = 1.0;
+        } else if (score < -param::checkmate) {
+            logistic_score = -1.0;
+        }
+
+        total += (logistic_score - eval) * (logistic_score - eval);
+    }
+
+    total /= static_cast<double>(positions.size());
+    return total;
+}
+
+
+double score_config_parallel(engine::computer_config config, const std::vector<std::pair<board::pos, double>> &positions) {
+    const int max_threads = 10;
+    std::array<double, max_threads> outputs{};
+    std::array<double, max_threads> sizes{};
+    std::vector<std::thread> threads;
+
+    int stride = positions.size() / max_threads;
+    std::vector<std::vector<std::pair<board::pos, double>>> custom_positions(max_threads);
+    for (int thread = 0; thread < max_threads; ++thread) {
+        int start = stride * thread;
+        for (int i = start; i < start + stride && i < positions.size(); ++i) {
+            custom_positions[thread].push_back(positions[i]);
+        }
+    }
+
+    for (int thread = 0; thread < max_threads; ++thread) {
+        int t = thread;
+        std::thread th{[&outputs, &sizes, t, custom_positions, config]() {
+            sizes[t] = custom_positions[t].size();
+            outputs[t] = score_config(config, custom_positions[t]);
+        }};
+        threads.push_back(std::move(th));
+    }
+
+    for (int i = 0; i < max_threads; ++i) {
+        threads[i].join();
+    }
+
+    double total = 0;
+    double total_sizes = 0;
+    for (int i = 0; i < max_threads; ++i) {
+        std::cout << outputs[i] << " " << sizes[i] << std::endl;
+        total += outputs[i] * sizes[i];
+        total_sizes += sizes[i];
+    }
+
+    total /= total_sizes;
+    return total;
+}
+
+
+void texel_tune() {
+    // read positions
+    std::vector<std::pair<board::pos, double>> positions;
+    std::ifstream file("../py/texel.txt");
+    if (file.is_open()) {
+        int amount = 0;
+        file >> amount;
+        for (int i = 0; i < amount; ++i) {
+            uint64_t lilypad, red, blue;
+            int turn;
+            double score;
+
+            file >> lilypad >> red >> blue >> turn >> score;
+            positions.push_back({{lilypad, red, blue, turn, 0},
+                                 score});
+        }
+
+
+        file.close();
+    } else {
+        throw std::runtime_error("cannot open file");
+    }
+
+    std::cout << "loaded " << positions.size() << " positions\n";
+
+    // texel tune
+    std::random_device dev;
+    std::mt19937_64 rng(dev());
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    engine::computer_config config;
+    double best_score = 0.4;
+    std::map<engine::computer_config, double> cache;
+    engine::computer_config top_config = config;
+    double top_score = 0.4;
+    while (true) {
+        engine::computer_config new_config = config;
+        new_config.change(rng);
+        double score;
+        if (cache.contains(new_config)) {
+            score = cache[new_config];
+        } else {
+            score = score_config_parallel(new_config, positions);
+            cache[new_config] = score;
+        }
+        printf("global best %.5f, local best %.5f, current %.5f\n", top_score, best_score, score);
+
+        if (score < best_score || dist(rng) < 0.1) {
+            if (score >= best_score) {
+                std::cout << "SIMANNEALED\n";
+            } else if (score < top_score) {
+                std::cout << "Improved global\n";
+
+                top_config = new_config;
+                top_score = score;
+            } else {
+                std::cout << "Improved local\n";
+            }
+
+            best_score = score;
+            config = new_config;
+        }
+        config.display();
+        top_config.display();
+    }
+}
+
 
 int main() {
-//    test_position();
-//    return 0;
+    texel_tune();
+    return 0;
+    //    test_position();
+    //    return 0;
 
     board::pos pos;
 
