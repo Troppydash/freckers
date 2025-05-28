@@ -6,6 +6,7 @@
 #define FRECKER_BOARD_H
 
 #include "colors.h"
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -264,81 +265,166 @@ namespace board {
         }
     };
 
+//    class dynamic_hash {
+//    public:
+//        uint64_t m_position_hashes[64][3]{};
+//        uint64_t m_turn_hash[2]{};
+//        std::array<uint64_t, 150> m_hash_lists;
+//        int m_index;
+//        dynamic_hash() {
+//            std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+//            std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+//            for (int i = 0; i < 64; ++i) {
+//                for (int k = 0; k < 3; ++k) {
+//                    m_position_hashes[i][k] = dist(rng);
+//                }
+//            }
+//
+//            m_turn_hash[0] = dist(rng);
+//            m_turn_hash[1] = dist(rng);
+//            m_hash_lists[0] = 0;
+//            m_index = 0;
+//        }
+//
+//        void init(board::mask red, board::mask blue, board::mask lily) {
+//            m_index = 0;
+//            m_hash_lists[m_index] = 0;
+//
+//            while (red > 0) {
+//                int i = __builtin_ctzll(red);
+//                red ^= (1ull << i);
+//
+//                m_hash_lists[m_index] ^= m_position_hashes[i][0];
+//            }
+//
+//            while (blue > 0) {
+//                int i = __builtin_ctzll(blue);
+//                blue ^= (1ull << i);
+//
+//                m_hash_lists[m_index] ^= m_position_hashes[i][1];
+//            }
+//
+//            while (lily > 0) {
+//                int i = __builtin_ctzll(lily);
+//                lily ^= (1ull << i);
+//
+//                m_hash_lists[m_index] ^= m_position_hashes[i][2];
+//            }
+//        }
+//
+//        void push(board::move &move, int turn) {
+//            if (move.is_null()) {
+//                return;
+//            }
+//
+//            m_hash_lists[m_index + 1] = m_hash_lists[m_index];
+//            m_index++;
+//
+//            if (move.is_grow()) {
+//                board::mask m = move.m_grow;
+//                while (m > 0) {
+//                    int i = __builtin_ctzll(m);
+//                    m ^= (1ull << i);
+//
+//                    m_hash_lists[m_index] ^= m_position_hashes[i][2];
+//                }
+//            } else {
+//                int from = __builtin_ctzll(move.m_start);
+//                int to = __builtin_ctzll(move.m_end);
+//                m_hash_lists[m_index] ^= m_position_hashes[from][turn];
+//                m_hash_lists[m_index] ^= m_position_hashes[to][turn];
+//                m_hash_lists[m_index] ^= m_position_hashes[from][2];
+//            }
+//        }
+//
+//        void pop(board::move &move, int turn) {
+//            if (move.is_null()) {
+//                return;
+//            }
+//
+//            m_index--;
+//        }
+//
+//        uint64_t get_hash(int turn) const {
+//            return m_hash_lists[m_index] ^ m_turn_hash[turn];
+//        }
+//    };
 
-    class dynamic_hash {
-    public:
-        uint64_t m_position_hashes[64][3]{};
-        uint64_t m_turn_hash[2]{};
 
-        uint64_t m_hash;
-        dynamic_hash() {
-            std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-            std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
-            for (int i = 0; i < 64; ++i) {
-                for (int k = 0; k < 3; ++k) {
-                    m_position_hashes[i][k] = dist(rng);
+        class dynamic_hash {
+        public:
+            uint64_t m_position_hashes[64][3]{};
+            uint64_t m_turn_hash[2]{};
+
+            uint64_t m_hash;
+            dynamic_hash() {
+                std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+                std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+                for (int i = 0; i < 64; ++i) {
+                    for (int k = 0; k < 3; ++k) {
+                        m_position_hashes[i][k] = dist(rng);
+                    }
                 }
+
+                m_turn_hash[0] = dist(rng);
+                m_turn_hash[1] = dist(rng);
+                m_hash = 0;
             }
 
-            m_turn_hash[0] = dist(rng);
-            m_turn_hash[1] = dist(rng);
-            m_hash = 0;
-        }
+            void init(board::mask red, board::mask blue, board::mask lily) {
+                m_hash = 0;
+                while (red > 0) {
+                    int i = __builtin_ctzll(red);
+                    red ^= (1ull << i);
 
-        void init(board::mask red, board::mask blue, board::mask lily) {
-            m_hash = 0;
-            while (red > 0) {
-                int i = __builtin_ctzll(red);
-                red ^= (1ull << i);
+                    m_hash ^= m_position_hashes[i][0];
+                }
 
-                m_hash ^= m_position_hashes[i][0];
-            }
+                while (blue > 0) {
+                    int i = __builtin_ctzll(blue);
+                    blue ^= (1ull << i);
 
-            while (blue > 0) {
-                int i = __builtin_ctzll(blue);
-                blue ^= (1ull << i);
+                    m_hash ^= m_position_hashes[i][1];
+                }
 
-                m_hash ^= m_position_hashes[i][1];
-            }
-
-            while (lily > 0) {
-                int i = __builtin_ctzll(lily);
-                lily ^= (1ull << i);
-
-                m_hash ^= m_position_hashes[i][2];
-            }
-        }
-
-        void push(board::move &move, int turn) {
-            if (move.is_null()) {
-                return;
-            }
-
-            if (move.is_grow()) {
-                board::mask m = move.m_grow;
-                while (m > 0) {
-                    int i = __builtin_ctzll(m);
-                    m ^= (1ull << i);
+                while (lily > 0) {
+                    int i = __builtin_ctzll(lily);
+                    lily ^= (1ull << i);
 
                     m_hash ^= m_position_hashes[i][2];
                 }
-            } else {
-                int from = __builtin_ctzll(move.m_start);
-                int to = __builtin_ctzll(move.m_end);
-                m_hash ^= m_position_hashes[from][turn];
-                m_hash ^= m_position_hashes[to][turn];
-                m_hash ^= m_position_hashes[from][2];
             }
-        }
 
-        void pop(board::move &move, int turn) {
-            push(move, turn);
-        }
+            void push(board::move &move, int turn) {
+                if (move.is_null()) {
+                    return;
+                }
 
-        uint64_t get_hash(int turn) const {
-            return m_hash ^ m_turn_hash[turn];
-        }
-    };
+                if (move.is_grow()) {
+                    board::mask m = move.m_grow;
+                    while (m > 0) {
+                        int i = __builtin_ctzll(m);
+                        m ^= (1ull << i);
+
+                        m_hash ^= m_position_hashes[i][2];
+                    }
+                } else {
+                    int from = __builtin_ctzll(move.m_start);
+                    int to = __builtin_ctzll(move.m_end);
+                    m_hash ^= m_position_hashes[from][turn];
+                    m_hash ^= m_position_hashes[to][turn];
+                    m_hash ^= m_position_hashes[from][2];
+                }
+            }
+
+            void pop(board::move &move, int turn) {
+                push(move, turn);
+            }
+
+            uint64_t get_hash(int turn) const {
+                return m_hash ^ m_turn_hash[turn];
+            }
+        };
 
 
     class pos {
@@ -633,6 +719,51 @@ namespace board {
             move::from_mask(all_jumps, piece, moves);
 
             return moves;
+        }
+
+        bool has_move() const {
+            mask player = m_players[m_turn];
+
+            mask pieces = player;
+            while (pieces > 0) {
+                // get piece mask
+                mask piece = 1ull << __builtin_ctzll(pieces);
+                pieces ^= piece;
+
+                // direct moves
+                mask direct = 0;
+                if (m_turn == RED) {
+                    direct = bitboard::dilate_down(piece);
+                } else {
+                    direct = bitboard::dilate_up(piece);
+                }
+                direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
+
+                if (direct > 0) {
+                    return true;
+                }
+
+                // jumps
+                mask obst = m_players[0] | m_players[1];
+                mask all_jumps = piece;
+                mask next_jumps = piece;
+
+                // broadcast
+                mask new_jumps = 0;
+                if (m_turn == RED) {
+                    new_jumps = bitboard::jump_down(next_jumps, obst);
+                } else {
+                    new_jumps = bitboard::jump_up(next_jumps, obst);
+                }
+
+                new_jumps &= m_lilypads & (~obst);
+                next_jumps = new_jumps & (~all_jumps);
+                if (next_jumps > 0) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         //??

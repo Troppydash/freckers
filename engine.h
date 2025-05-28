@@ -154,15 +154,15 @@ namespace engine {
         int m_window;
 
         computer_config() {
-            m_lmp_margins = {0, 5, 13, 14, 18, 25};
+            m_lmp_margins = {0, 6, 14, 14, 18, 23};
             m_lmr_depth = 3;
             m_lmr_move = 7;
             m_tempo = 55;
-            m_static_null_move_margin = 390;
-            m_countermove = 5;
+            m_static_null_move_margin = 400;
+            m_countermove = 7;
             m_lily_min = 3;
-            m_lily_scale = 8;
-            m_window = 4;
+            m_lily_scale = 9;
+            m_window = 3;
         }
 
 
@@ -274,7 +274,7 @@ namespace engine {
 
 
         explicit computer(pos pos, std::vector<std::string> weights, computer_config config)
-            : m_tt(32), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+            : m_tt(256), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED), m_solver_blue(board::BLUE), m_config(config) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -413,7 +413,7 @@ namespace engine {
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score / 2 + param::end_move_score;
+                        score += param::base_score + param::end_move_score / 2;
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
@@ -754,8 +754,13 @@ namespace engine {
                 return evaluate();
             }
 
+//            if (!m_pos.has_move()) {
+//                depth += 1;
+//            }
+
             bool is_root = ply == 0;
             bool is_pv_node = (beta - alpha) != 1;
+
 
             if (depth <= 0) {
                 return qsearch(ply, 0, alpha, beta, pv_line);
@@ -766,7 +771,6 @@ namespace engine {
             if (should_use && !is_root) {
                 return tt_score;
             }
-
 
             //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 7 && abs(evaluate()) <= 10 * 100) {
             //                int best_score = 0;
@@ -904,7 +908,7 @@ namespace engine {
                     store_killer(ply, move);
                     break;
                 } else {
-                    decr_history(move);
+//                    decr_history(move);
                 }
 
                 if (score > alpha) {
@@ -915,9 +919,9 @@ namespace engine {
                     for (auto m: child_pv_line) {
                         pv_line.push_back(m);
                     }
-                    incr_history(move, depth);
+//                    incr_history(move, depth);
                 } else {
-                    decr_history(move);
+//                    decr_history(move);
                 }
 
                 child_pv_line.clear();

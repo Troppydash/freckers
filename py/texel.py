@@ -39,7 +39,7 @@ def generator():
 
         for i in range(len(dataset.positions)):
             # 9mllion, requires 10k,
-            prob = 25 / 9000
+            prob = 50 / 9000
             if not (random.random() < prob):
                 continue
 

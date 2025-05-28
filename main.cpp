@@ -29,34 +29,53 @@ struct instance {
 
 
 extern "C" {
-std::map<int, instance> instances;
+std::mutex lock;
+std::unordered_map<int, instance> instances;
 int next_handle = 0;
 
 int make_instance() {
+    lock.lock();
     instances[next_handle] = {0, {}, {}, {}, "../", nullptr};
     next_handle += 1;
-    return next_handle - 1;
+    int ret = next_handle - 1;
+    lock.unlock();
+    return ret;
 }
 
 void free_instance(int handle) {
+    lock.lock();
     instances.erase(handle);
+    lock.unlock();
 }
 
 /// ENGINE ///
 void set_weights(int handle, char *base) {
+    lock.lock();
+
     std::cout << "[cpp] setting weights to " << base << std::endl;
     instances[handle].weights = std::string{base};
+
+    lock.unlock();
 }
 
 void play(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves, int ts, bool verbose) {
+    lock.lock();
+
     board::pos pos{lily, red, blue, turn, moves};
     engine::computer engine{pos, get_weights(instances[handle].weights)};
     instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
+
+    lock.unlock();
 }
 
 void play_board(int handle, int ts, int verbose) {
+    lock.lock();
+
+
     engine::computer engine{instances[handle].last_pos, get_weights_direct(instances[handle].weights)};
     instances[handle].last_move = engine.search(ts, &instances[handle].last_score, verbose);
+
+    lock.unlock();
 }
 
 
@@ -98,47 +117,72 @@ uint64_t ponder_grow(int handle) {
 }
 
 int get_last_score(int handle) {
-    return instances[handle].last_score;
+    lock.lock();
+    auto ret = instances[handle].last_score;
+    lock.unlock();
+    return ret;
 }
 
 uint64_t get_last_move_start(int handle) {
-    return instances[handle].last_move.m_start;
+    lock.lock();
+    auto ret = instances[handle].last_move.m_start;
+    lock.unlock();
+    return ret;
 }
 
 uint64_t get_last_move_end(int handle) {
-    return instances[handle].last_move.m_end;
+    lock.lock();
+    auto ret = instances[handle].last_move.m_end;
+    lock.unlock();
+    return ret;
 }
 
 uint64_t get_last_move_grow(int handle) {
-    return instances[handle].last_move.m_grow;
+    lock.lock();
+    auto ret = instances[handle].last_move.m_grow;
+    lock.unlock();
+    return ret;
 }
 
 /// BOARD ///
 
 void pos_default(int handle) {
+    lock.lock();
     instances[handle].last_pos = board::pos{};
+    lock.unlock();
 }
 
 void pos_load(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int moves) {
+    lock.lock();
     instances[handle].last_pos = board::pos{lily, red, blue, turn, moves};
+    lock.unlock();
 }
 
 void pos_display(int handle) {
+    lock.lock();
     std::cout << instances[handle].last_pos.display() << std::endl;
+    lock.unlock();
 }
 
 void pos_push(int handle, uint64_t grow, uint64_t start, uint64_t end) {
+    lock.lock();
     board::move m{grow, start, end};
     instances[handle].last_pos.push(m);
+    lock.unlock();
 }
 
 void pos_pop(int handle, uint64_t grow, uint64_t start, uint64_t end) {
+    lock.lock();
     board::move m{grow, start, end};
     instances[handle].last_pos.pop(m);
+    lock.unlock();
 }
 
 int pos_state(int handle) {
-    return instances[handle].last_pos.get_state();
+    lock.lock();
+    auto ret = instances[handle].last_pos.get_state();
+    lock.unlock();
+    return ret;
 }
 
 uint64_t pos_lily(int handle) {
@@ -162,7 +206,9 @@ int pos_turn(int handle) {
 }
 
 void pos_compute_moves(int handle) {
+    lock.lock();
     instances[handle].last_moves = instances[handle].last_pos.get_moves();
+    lock.unlock();
 }
 
 int pos_moves_length(int handle) {
@@ -182,7 +228,10 @@ uint64_t pos_moves_grow(int handle, int i) {
 }
 
 bool pos_has_jumps(int handle) {
-    return instances[handle].last_pos.has_jumps();
+    lock.lock();
+    auto res = instances[handle].last_pos.has_jumps();
+    lock.unlock();
+    return res;
 }
 }
 
@@ -276,7 +325,7 @@ double score_config(engine::computer_config config, std::vector<std::pair<board:
         // compute engine
         int score = 0;
         computer.reset(position);
-        computer.search(5000, &score, false, 6);
+        computer.search(10000, &score, false, 7);
 
         // map score to logistic score
         double logistic_score = 2.0 / (1.0 + exp(-score / 1000.0)) - 1.0;
@@ -295,7 +344,7 @@ double score_config(engine::computer_config config, std::vector<std::pair<board:
 
 
 double score_config_parallel(engine::computer_config config, const std::vector<std::pair<board::pos, double>> &positions) {
-    const int max_threads = 10;
+    const int max_threads = 14;
     std::array<double, max_threads> outputs{};
     std::array<double, max_threads> sizes{};
     std::vector<std::thread> threads;
@@ -370,6 +419,8 @@ void texel_tune() {
     std::map<engine::computer_config, double> cache;
     engine::computer_config top_config = config;
     double top_score = 0.4;
+    std::cout << dist(rng) << std::endl;
+    std::cout << dist(rng) << std::endl;
     while (true) {
         engine::computer_config new_config = config;
         new_config.change(rng);
@@ -382,7 +433,7 @@ void texel_tune() {
         }
         printf("global best %.5f, local best %.5f, current %.5f\n", top_score, best_score, score);
 
-        if (score < best_score || dist(rng) < 0.1) {
+        if (score < best_score || dist(rng) < 0.15) {
             if (score >= best_score) {
                 std::cout << "SIMANNEALED\n";
             } else if (score < top_score) {
