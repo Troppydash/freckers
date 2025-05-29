@@ -16,11 +16,11 @@
 #include <vector>
 
 namespace nnue {
-    constexpr int32_t WEIGHT8_SCALE = static_cast<int16_t>((1<<6)-1);
-    constexpr int32_t WEIGHT_ZERO = static_cast<int16_t>(0);
+    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<6));
+    constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
-    template<typename T, std::size_t ALIGNMENT_IN_BYTES = 64>
+    template<typename T, std::size_t ALIGNMENT_IN_BYTES = 16>
     using AlignedVector = std::vector<T, AlignedAllocator<T, ALIGNMENT_IN_BYTES>>;
 
     class crelu {
@@ -30,8 +30,8 @@ namespace nnue {
 
         explicit crelu(uint64_t inputs) : m_inputs(inputs), m_output(inputs, 0) {}
 
-        static int32_t clipped_relu(int32_t x) {
-            return static_cast<int32_t>(std::max(WEIGHT_ZERO, std::min(WEIGHT8_SCALE, x)));
+        static inline int32_t clipped_relu(int32_t x) {
+            return static_cast<int32_t>(std::max((int32_t)WEIGHT_ZERO, std::min((int32_t)WEIGHT8_SCALE, x)));
         }
 
         void forward(const AlignedVector<int32_t> &x) {
@@ -82,7 +82,7 @@ namespace nnue {
                 for (int i = 0; i < m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT8_SCALE * WEIGHT8_SCALE)));
+                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT8_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
@@ -139,6 +139,10 @@ namespace nnue {
                 //                }
             }
 
+            for (int i = 0; i < m_outputs; ++i) {
+                m_output[i] /= WEIGHT8_SCALE;
+            }
+
 
             {
                 for (int i = 0; i < m_outputs; ++i) {
@@ -158,10 +162,10 @@ namespace nnue {
                 //                }
             }
 
-            for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] /= WEIGHT8_SCALE;
-            }
-
+//            for (int i = 0; i < m_outputs; ++i) {
+//                m_output[i] /= WEIGHT8_SCALE;
+//            }
+//
 
 
 
@@ -271,7 +275,7 @@ namespace nnue {
             set_changed();
         }
 
-        void init(std::vector<int16_t> &red, std::vector<int16_t> &blue) {
+        void init(std::vector<int32_t> &red, std::vector<int32_t> &blue) {
             for (auto &i: red) {
                 i *= WEIGHT8_SCALE;
             }

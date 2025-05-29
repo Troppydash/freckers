@@ -455,8 +455,8 @@ void texel_tune() {
 
 
 int main() {
-    texel_tune();
-    return 0;
+//    texel_tune();
+//    return 0;
     //    test_position();
     //    return 0;
 

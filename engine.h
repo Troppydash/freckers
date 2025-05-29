@@ -23,13 +23,13 @@ namespace engine {
 
     class entry {
     public:
-        uint64_t m_hash = 0;
+        board::hash m_hash = 0;
         int m_depth = 0;
         int m_score = 0;
         move m_best_move = move::null();
         int m_flag = 0;
 
-        std::tuple<int, bool, move> get(uint64_t hash, int ply, int depth, int alpha, int beta) {
+        std::tuple<int, bool, move> get(board::hash hash, int ply, int depth, int alpha, int beta) const {
             int adj_score = 0;
             bool should_use = false;
             move best_move = move::null();
@@ -62,7 +62,7 @@ namespace engine {
             return {adj_score, should_use, best_move};
         }
 
-        void set(pos &pos, uint64_t hash, int score, move &best_move, int ply, int depth, int flag) {
+        void set(pos &pos, board::hash hash, int score, move &best_move, int ply, int depth, int flag) {
             m_hash = hash;
             m_depth = depth;
             m_best_move = best_move;
@@ -82,9 +82,10 @@ namespace engine {
     class table {
     public:
         std::vector<entry> m_entries;
-        uint64_t m_size;
+        board::hash m_size;
 
         explicit table(int size_in_mb) {
+            // should prob make this a power of 2
             m_size = size_in_mb * 1024 * 1024 / sizeof(entry);
 
             for (int i = 0; i < m_size; ++i) {
@@ -92,8 +93,8 @@ namespace engine {
             }
         }
 
-        entry &probe(uint64_t hash) {
-            uint64_t index = hash % m_size;
+        entry &probe(board::hash hash) {
+            board::hash index = hash % m_size;
             return m_entries[index];
         }
 
@@ -153,6 +154,9 @@ namespace engine {
         int m_static_null_move_margin;
         int m_window;
 
+        std::array<int, 9> m_fut_margins{};
+
+
         computer_config() {
             m_lmp_margins = {0, 6, 14, 14, 18, 23};
             m_lmr_depth = 3;
@@ -163,6 +167,7 @@ namespace engine {
             m_lily_min = 3;
             m_lily_scale = 9;
             m_window = 3;
+            m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
         }
 
 
@@ -274,7 +279,7 @@ namespace engine {
 
 
         explicit computer(pos pos, std::vector<std::string> weights, computer_config config)
-            : m_tt(256), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
+            : m_tt(512), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
               m_solver_red(board::RED), m_solver_blue(board::BLUE), m_config(config) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
@@ -299,7 +304,7 @@ namespace engine {
 
             for (int depth = 0; depth < 50; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / std::max(1,m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
+                    m_lmr[depth][move] = std::max(1, depth / std::max(1, m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
                 }
             }
 
@@ -754,9 +759,9 @@ namespace engine {
                 return evaluate();
             }
 
-//            if (!m_pos.has_move()) {
-//                depth += 1;
-//            }
+            //            if (!m_pos.has_move()) {
+            //                depth += 1;
+            //            }
 
             bool is_root = ply == 0;
             bool is_pv_node = (beta - alpha) != 1;
@@ -766,8 +771,8 @@ namespace engine {
                 return qsearch(ply, 0, alpha, beta, pv_line);
             }
 
-            auto &entry = m_tt.probe(m_pos.hash());
-            auto [tt_score, should_use, tt_move] = entry.get(m_pos.hash(), ply, depth, alpha, beta);
+            auto &entry = m_tt.probe(m_pos.get_hash());
+            auto [tt_score, should_use, tt_move] = entry.get(m_pos.get_hash(), ply, depth, alpha, beta);
             if (should_use && !is_root) {
                 return tt_score;
             }
@@ -817,6 +822,28 @@ namespace engine {
                 }
             }
 
+
+            // razoring
+            // if static eval is really bad, check via qsearch to see if it fails-low
+            if (depth <= 4 && !is_pv_node && !m_pos.has_jumps()) {
+                int static_score = evaluate();
+                if (static_score + depth*400 < alpha) {
+                    std::vector<move> line;
+                    int score = qsearch(ply, 0, alpha, beta, line);
+                    if (score < alpha) {
+                        return alpha;
+                    }
+                }
+            }
+
+            // futility pruning, when static is much worse than alpha, likely not a cut-node, so prune every quiet-move except the pv node
+            bool canFutilityPrune = false;
+            if (depth <= 8 && !is_pv_node && alpha < param::checkmate && beta < param::checkmate && !m_pos.has_jumps()) {
+                int static_score = evaluate();
+                canFutilityPrune = static_score + depth*300 <= alpha;
+            }
+
+
             std::vector<move> child_pv_line;
 
             // internal ID
@@ -854,6 +881,7 @@ namespace engine {
                 move &move = moves[scored_moves[i].second];
 
                 int explored_moves = i + 1;
+
                 push_nnue(move);
                 m_pos.push(move);
 
@@ -866,6 +894,16 @@ namespace engine {
                         continue;
                     }
                 }
+
+                if (canFutilityPrune && explored_moves > 1 && !move.is_jump()) {
+                    bool tactical = m_pos.has_jumps();
+                    if (!tactical) {
+                        m_pos.pop(move);
+                        pop_nnue(move);
+                        continue;
+                    }
+                }
+
 
                 int score;
                 if (explored_moves == 1) {
@@ -908,7 +946,7 @@ namespace engine {
                     store_killer(ply, move);
                     break;
                 } else {
-//                    decr_history(move);
+                    //                    decr_history(move);
                 }
 
                 if (score > alpha) {
@@ -919,9 +957,9 @@ namespace engine {
                     for (auto m: child_pv_line) {
                         pv_line.push_back(m);
                     }
-//                    incr_history(move, depth);
+                    //                    incr_history(move, depth);
                 } else {
-//                    decr_history(move);
+                    //                    decr_history(move);
                 }
 
                 child_pv_line.clear();
@@ -937,7 +975,7 @@ namespace engine {
             }
 
             if (depth > entry.m_depth && !m_timer.m_is_stopped) {
-                entry.set(m_pos, m_pos.hash(), best_score, best_move, ply, depth, tt_flag);
+                entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
 
             return best_score;
@@ -957,8 +995,8 @@ namespace engine {
             return std::to_string((double) score / 100);
         }
 
-        std::pair<std::vector<int16_t>, std::vector<int16_t>> init_nnue() {
-            std::vector<int16_t> red;
+        std::pair<std::vector<int32_t>, std::vector<int32_t>> init_nnue() {
+            std::vector<int32_t> red;
             for (int i = 0; i < 64; ++i) {
                 if (m_pos.m_lilypads & (1ull << i)) {
                     red.push_back(1);
@@ -975,7 +1013,7 @@ namespace engine {
                 }
             }
 
-            std::vector<int16_t> blue;
+            std::vector<int32_t> blue;
             for (int i = 0; i < 64; ++i) {
                 if (m_pos.m_lilypads & (1ull << (63 - i))) {
                     blue.push_back(1);

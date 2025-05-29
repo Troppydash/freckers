@@ -17,6 +17,7 @@
 
 namespace board {
     using mask = uint64_t;
+    using hash = unsigned __int128;
 
     const int RED = 0;
     const int BLUE = 1;
@@ -353,21 +354,21 @@ namespace board {
 
         class dynamic_hash {
         public:
-            uint64_t m_position_hashes[64][3]{};
-            uint64_t m_turn_hash[2]{};
+            hash m_position_hashes[64][3]{};
+            hash m_turn_hash[2]{};
 
-            uint64_t m_hash;
+            hash m_hash;
             dynamic_hash() {
                 std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
                 std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
                 for (int i = 0; i < 64; ++i) {
                     for (int k = 0; k < 3; ++k) {
-                        m_position_hashes[i][k] = dist(rng);
+                        m_position_hashes[i][k] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
                     }
                 }
 
-                m_turn_hash[0] = dist(rng);
-                m_turn_hash[1] = dist(rng);
+                m_turn_hash[0] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
+                m_turn_hash[1] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
                 m_hash = 0;
             }
 
@@ -421,7 +422,7 @@ namespace board {
                 push(move, turn);
             }
 
-            uint64_t get_hash(int turn) const {
+            hash get_hash(int turn) const {
                 return m_hash ^ m_turn_hash[turn];
             }
         };
@@ -963,7 +964,7 @@ namespace board {
         }
 
 
-        uint64_t hash() const {
+        hash get_hash() const {
             return m_hasher.get_hash(m_turn);
         }
 
