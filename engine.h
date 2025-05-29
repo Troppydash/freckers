@@ -8,11 +8,13 @@
 #include "board.h"
 #include "nnue.h"
 #include "param.h"
+#include "threadpool.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cinttypes>
 #include <iostream>
+#include <map>
 #include <random>
 #include <tuple>
 #include <utility>
@@ -84,7 +86,7 @@ namespace engine {
         std::vector<entry> m_entries;
         board::hash m_size;
 
-        explicit table(int size_in_mb) {
+        explicit table(size_t size_in_mb) {
             // should prob make this a power of 2
             m_size = size_in_mb * 1024 * 1024 / sizeof(entry);
 
@@ -255,32 +257,25 @@ namespace engine {
 
     class computer {
     public:
-        table m_tt;
+        table &m_tt;
         pos m_pos;
-        timer m_timer;
         int m_searched;
-        int m_astar_searched;
 
         int m_history[2][64][64];
         int m_lmr[50][100];
-        std::array<int, 6> m_lmp_margins;
         move m_killers[100][2];
         move m_counter[2][64][64];
-
         nnue::seq m_nnue;
-
-        endgame::a_star m_solver_red;
-        endgame::a_star m_solver_blue;
-
         computer_config m_config;
 
-        explicit computer(pos pos, std::vector<std::string> weights)
-            : computer(pos, std::move(weights), computer_config()) {}
+        timer m_timer;
+
+        explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights)
+            : computer(pos, tt, timer, std::move(weights), computer_config()) {}
 
 
-        explicit computer(pos pos, std::vector<std::string> weights, computer_config config)
-            : m_tt(512), m_pos(pos), m_timer(), m_searched(0), m_astar_searched(0), m_nnue(weights),
-              m_solver_red(board::RED), m_solver_blue(board::BLUE), m_config(config) {
+        explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights, computer_config config)
+            : m_tt(tt), m_pos(pos), m_searched(0), m_nnue(weights), m_config(config), m_timer(timer) {
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
@@ -307,8 +302,6 @@ namespace engine {
                     m_lmr[depth][move] = std::max(1, depth / std::max(1, m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
                 }
             }
-
-            m_lmp_margins = m_config.m_lmp_margins;
         }
 
         int median_piece(uint64_t red, uint64_t blue) {
@@ -665,74 +658,74 @@ namespace engine {
             return best_score;
         }
 
-        bool handle_crossed(int &score, int &turns, int depth, int ply, std::vector<move> &pv_line) {
-            int results[2] = {0, 0};
-            board::move best_red_move = board::move::null();
-            board::move best_blue_move = board::move::null();
-            m_solver_red.reset(depth);
-            m_solver_blue.reset(depth);
-
-            // use heuristic to find who is first
-            int winning = evaluate() > 0 ? m_pos.m_turn : 1 - m_pos.m_turn;
-            if (winning == RED) {
-                results[0] = m_solver_red.search(m_pos, best_red_move);
-                if (results[0] == -1) {
-                    return false;
-                }
-
-                m_timer.check();
-                if (m_timer.m_is_stopped) {
-                    return false;
-                }
-
-                m_solver_blue.m_best_depth = results[0];
-                results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                if (results[1] == -1) {
-                    return false;
-                }
-            } else {
-                results[1] = m_solver_blue.search(m_pos, best_blue_move);
-                if (results[1] == -1) {
-                    return false;
-                }
-
-                m_timer.check();
-                if (m_timer.m_is_stopped) {
-                    return false;
-                }
-
-                m_solver_red.m_best_depth = results[1];
-                results[0] = m_solver_red.search(m_pos, best_red_move);
-                if (results[0] == -1) {
-                    return false;
-                }
-            }
-
-            m_timer.check();
-            if (m_timer.m_is_stopped) {
-                return false;
-            }
-
-            if (m_pos.m_turn == board::RED) {
-                if (results[board::BLUE] < results[board::RED]) {
-                    turns = results[board::BLUE] * 2;
-                    score = -param::inf + ply + turns;
-                } else {
-                    turns = results[board::RED] * 2 - 1;
-                    score = param::inf - ply - turns;
-                }
-            } else {
-                if (results[board::RED] < results[board::BLUE]) {
-                    turns = results[board::RED] * 2;
-                    score = -param::inf + ply + turns;
-                } else {
-                    turns = results[board::BLUE] * 2 - 1;
-                    score = param::inf - ply - turns;
-                }
-            }
-
-            return true;
-        }
+        //        bool handle_crossed(int &score, int &turns, int depth, int ply, std::vector<move> &pv_line) {
+        //            int results[2] = {0, 0};
+        //            board::move best_red_move = board::move::null();
+        //            board::move best_blue_move = board::move::null();
+        //            m_solver_red.reset(depth);
+        //            m_solver_blue.reset(depth);
+        //
+        //            // use heuristic to find who is first
+        //            int winning = evaluate() > 0 ? m_pos.m_turn : 1 - m_pos.m_turn;
+        //            if (winning == RED) {
+        //                results[0] = m_solver_red.search(m_pos, best_red_move);
+        //                if (results[0] == -1) {
+        //                    return false;
+        //                }
+        //
+        //                m_timer.check();
+        //                if (m_timer.m_is_stopped) {
+        //                    return false;
+        //                }
+        //
+        //                m_solver_blue.m_best_depth = results[0];
+        //                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+        //                if (results[1] == -1) {
+        //                    return false;
+        //                }
+        //            } else {
+        //                results[1] = m_solver_blue.search(m_pos, best_blue_move);
+        //                if (results[1] == -1) {
+        //                    return false;
+        //                }
+        //
+        //                m_timer.check();
+        //                if (m_timer.m_is_stopped) {
+        //                    return false;
+        //                }
+        //
+        //                m_solver_red.m_best_depth = results[1];
+        //                results[0] = m_solver_red.search(m_pos, best_red_move);
+        //                if (results[0] == -1) {
+        //                    return false;
+        //                }
+        //            }
+        //
+        //            m_timer.check();
+        //            if (m_timer.m_is_stopped) {
+        //                return false;
+        //            }
+        //
+        //            if (m_pos.m_turn == board::RED) {
+        //                if (results[board::BLUE] < results[board::RED]) {
+        //                    turns = results[board::BLUE] * 2;
+        //                    score = -param::inf + ply + turns;
+        //                } else {
+        //                    turns = results[board::RED] * 2 - 1;
+        //                    score = param::inf - ply - turns;
+        //                }
+        //            } else {
+        //                if (results[board::RED] < results[board::BLUE]) {
+        //                    turns = results[board::RED] * 2;
+        //                    score = -param::inf + ply + turns;
+        //                } else {
+        //                    turns = results[board::BLUE] * 2 - 1;
+        //                    score = param::inf - ply - turns;
+        //                }
+        //            }
+        //
+        //            return true;
+        //        }
 
 
         int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, const move &prev_move, bool do_null = true) {
@@ -827,7 +820,7 @@ namespace engine {
             // if static eval is really bad, check via qsearch to see if it fails-low
             if (depth <= 4 && !is_pv_node && !m_pos.has_jumps()) {
                 int static_score = evaluate();
-                if (static_score + depth*400 < alpha) {
+                if (static_score + depth * 400 < alpha) {
                     std::vector<move> line;
                     int score = qsearch(ply, 0, alpha, beta, line);
                     if (score < alpha) {
@@ -840,7 +833,7 @@ namespace engine {
             bool canFutilityPrune = false;
             if (depth <= 8 && !is_pv_node && alpha < param::checkmate && beta < param::checkmate && !m_pos.has_jumps()) {
                 int static_score = evaluate();
-                canFutilityPrune = static_score + depth*300 <= alpha;
+                canFutilityPrune = static_score + depth * 300 <= alpha;
             }
 
 
@@ -886,7 +879,7 @@ namespace engine {
                 m_pos.push(move);
 
                 // lmp
-                if (depth <= 5 && !is_pv_node && explored_moves > m_lmp_margins[depth] && !move.is_jump()) {
+                if (depth <= 5 && !is_pv_node && explored_moves > m_config.m_lmp_margins[depth] && !move.is_jump()) {
                     bool tactical = m_pos.has_jumps();
                     if (!tactical) {
                         m_pos.pop(move);
@@ -981,19 +974,6 @@ namespace engine {
             return best_score;
         }
 
-        std::string get_score(int score) {
-            if (score > param::checkmate) {
-                int ply = param::inf - score;
-                return std::string{"game in "} + std::to_string(ply) + " ply";
-            }
-
-            if (score < -param::checkmate) {
-                int ply = -param::inf - score;
-                return std::string{"game in "} + std::to_string(ply) + " ply";
-            }
-
-            return std::to_string((double) score / 100);
-        }
 
         std::pair<std::vector<int32_t>, std::vector<int32_t>> init_nnue() {
             std::vector<int32_t> red;
@@ -1062,92 +1042,349 @@ namespace engine {
             }
         }
 
-        move search(int ts, int *new_score, bool verbose, int max_depth = param::max_depth) {
-            move best_move = move::null();
-            int alpha = -param::inf;
-            int beta = param::inf;
-            std::vector<move> pv_line;
-            int depth = 1;
-
-            m_timer.start(ts);
-
+        void init() {
             m_searched = 0;
-
-            std::chrono::milliseconds last = m_timer.now();
-            int last_searched = m_searched;
-
             auto [red, blue] = init_nnue();
             m_nnue.init(red, blue);
+        }
 
-            bool extended = false;
+        //        move search(int ts, int *new_score, bool verbose, int max_depth = param::max_depth) {
+        //            move best_move = move::null();
+        //            int alpha = -param::inf;
+        //            int beta = param::inf;
+        //            std::vector<move> pv_line;
+        //            int depth = 1;
+        //
+        //            m_timer.start(ts);
+        //
+        //            m_searched = 0;
+        //
+        //            std::chrono::milliseconds last = m_timer.now();
+        //            int last_searched = m_searched;
+        //
+        //            auto [red, blue] = init_nnue();
+        //            m_nnue.init(red, blue);
+        //
+        //            bool extended = false;
+        //
+        //            while (depth <= max_depth) {
+        //                pv_line.clear();
+        //                move null = move::null();
+        //                int score = negamax(depth, 0, alpha, beta, pv_line, null);
+        //
+        //                bool ok = alpha < score && score < beta;
+        //                if (!pv_line.empty()) {
+        //                    if (m_timer.m_is_stopped) {
+        //                        if (alpha != -param::inf) {
+        //                            best_move = pv_line[0];
+        //                        }
+        //                    } else if (ok) {
+        //                        best_move = pv_line[0];
+        //                    }
+        //                }
+        //
+        //
+        //                if (verbose) {
+        //                    std::chrono::milliseconds now = m_timer.now();
+        //                    long delta = (now - last).count();
+        //                    int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
+        //                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, occ %.2lf%%, ", depth, m_searched, m_astar_searched,
+        //                           get_score(score).c_str(), score, nps, m_tt.occupied() * 100.0);
+        //
+        //                    printf("pv = [ ");
+        //                    for (auto m: pv_line) {
+        //                        std::cout << m.display() << ", ";
+        //                    }
+        //                    printf("]\n");
+        //
+        //                    last = now;
+        //                    last_searched = m_searched;
+        //                }
+        //
+        //
+        //                if (m_timer.m_is_stopped) {
+        //                    break;
+        //                }
+        //
+        //                if (!ok) {
+        //                    alpha = -param::inf;
+        //                    beta = param::inf;
+        //
+        //                    // restart
+        //                    if (depth >= 6 && !extended) {
+        //                        m_timer.add(ts / 2);
+        //                        extended = true;
+        //                    }
+        //
+        //                    continue;
+        //                }
+        //
+        //
+        //                if (new_score != nullptr) {
+        //                    *new_score = score;
+        //                }
+        //
+        //                alpha = score - m_config.m_window * 100;
+        //                beta = score + m_config.m_window * 100;
+        //
+        //                depth += 1;
+        //            }
+        //
+        //            if (verbose) {
+        //                printf("nodes %d\n", m_searched);
+        //            }
+        //            return best_move;
+        //        }
+    };
 
+
+    class lazysmp {
+    public:
+        timer m_timer;
+        int m_threads;
+        threadpool m_pool;
+        table m_tt;
+
+        explicit lazysmp(int threads)
+            : m_threads(threads), m_pool(threads), m_tt(1024) {
+        }
+
+
+        std::string get_score(int score) {
+            if (score > param::checkmate) {
+                int ply = param::inf - score;
+                return std::string{"game in "} + std::to_string(ply) + " ply";
+            }
+
+            if (score < -param::checkmate) {
+                int ply = -param::inf - score;
+                return std::string{"game in "} + std::to_string(ply) + " ply";
+            }
+
+            return std::to_string((double) score / 100);
+        }
+
+        move search(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
+            m_timer.start(ts);
+
+            // setup
+            std::vector<computer> computers;
+            for (int i = 0; i < m_threads; ++i) {
+                computer comp{pos, m_tt, m_timer, weights, config};
+                comp.init();
+                computers.emplace_back(comp);
+            }
+
+            if (verbose)
+                printf("searching with %d threads\n", m_threads);
+
+            // search depth one fully using the first comp
+            int depth = 1;
+            std::vector<move> pv_line;
+            move null = move::null();
+            int alpha = -param::inf;
+            int beta = param::inf;
+            int score = computers[0].negamax(depth, 0, alpha, beta, pv_line, null);
+            move best_move = pv_line[0];
+            if (new_score != nullptr)
+                *new_score = score;
+            depth += 1;
+            alpha = score - config.m_window * 100;
+            beta = score + config.m_window * 100;
+
+
+            std::vector<int> scores(m_threads);
+            std::vector<move> best_moves(m_threads);
             while (depth <= max_depth) {
-                pv_line.clear();
-                move null = move::null();
-                int score = negamax(depth, 0, alpha, beta, pv_line, null);
+                // set timers
+                for (int i = 0; i < m_threads; ++i) {
+                    computers[i].m_timer = m_timer;
+                }
 
-                bool ok = alpha < score && score < beta;
-                if (!pv_line.empty()) {
-                    if (m_timer.m_is_stopped) {
-                        if (alpha != -param::inf) {
-                            best_move = pv_line[0];
+                // start search with variation
+                std::atomic<int> finished_tasks = 0;
+                std::atomic<bool> is_finished = false;
+                for (int i = 0; i < m_threads; ++i) {
+                    int threads = m_threads;
+                    m_pool.enqueue([&, i, alpha, beta, threads]() {
+                        int a = alpha;
+                        int b = beta;
+
+                        while (true) {
+                            std::vector<move> pv_line;
+                            move null = move::null();
+                            computer &comp = computers[i];
+                            int score = comp.negamax(depth + i % 2, 0, a, b, pv_line, null);
+
+                            bool ok = a < score && score < b;
+                            if (!pv_line.empty()) {
+                                if (comp.m_timer.m_is_stopped) {
+                                    if (a != -param::inf) {
+                                        best_moves[i] = pv_line[0];
+                                    }
+                                } else if (ok) {
+                                    best_moves[i] = pv_line[0];
+                                }
+                            }
+
+                            if (comp.m_timer.m_is_stopped) {
+                                finished_tasks += 1;
+                                if (finished_tasks == threads) {
+                                    is_finished = true;
+                                    is_finished.notify_one();
+                                }
+                                return;
+                            }
+
+
+                            if (!ok) {
+                                a = -param::inf;
+                                b = param::inf;
+                                continue;
+                            }
+
+                            scores[i] = score;
+
+                            finished_tasks += 1;
+                            if (finished_tasks == threads) {
+                                is_finished = true;
+                                is_finished.notify_one();
+                            }
+                            return;
                         }
-                    } else if (ok) {
-                        best_move = pv_line[0];
-                    }
+                    });
                 }
 
+                // wait until threads finished
+                is_finished.wait(false);
 
-                if (verbose) {
-                    std::chrono::milliseconds now = m_timer.now();
-                    long delta = (now - last).count();
-                    int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, occ %.2lf%%, ", depth, m_searched, m_astar_searched,
-                           get_score(score).c_str(), score, nps, m_tt.occupied() * 100.0);
-
-                    printf("pv = [ ");
-                    for (auto m: pv_line) {
-                        std::cout << m.display() << ", ";
-                    }
-                    printf("]\n");
-
-                    last = now;
-                    last_searched = m_searched;
-                }
-
-
+                // check if timer exceeds
+                m_timer.check();
                 if (m_timer.m_is_stopped) {
                     break;
                 }
 
-                if (!ok) {
-                    alpha = -param::inf;
-                    beta = param::inf;
-
-                    // restart
-                    if (depth >= 6 && !extended) {
-                        m_timer.add(ts / 2);
-                        extended = true;
+                // merge best_moves
+                int most_frequent_count = 0;
+                move most_frequent = null;
+                std::map<move, int> frequency;
+                for (int i = 0; i < m_threads; ++i) {
+                    frequency[best_moves[i]] += 1;
+                    if (frequency[best_moves[i]] > most_frequent_count) {
+                        most_frequent_count = frequency[best_moves[i]];
+                        most_frequent = best_moves[i];
                     }
-
-                    continue;
                 }
 
+                int score = 0;
+                for (int i = 0; i < m_threads; ++i) {
+                    if (best_moves[i] == most_frequent) {
+                        score += scores[i];
+                    }
+                }
 
-                if (new_score != nullptr) {
+                score = score / frequency[most_frequent];
+                if (new_score != nullptr)
                     *new_score = score;
+                best_move = most_frequent;
+
+                int nodes = 0;
+                for (int i = 0; i < m_threads; ++i) {
+                    nodes += computers[i].m_searched;
                 }
 
-                alpha = score - m_config.m_window * 100;
-                beta = score + m_config.m_window * 100;
+                if (verbose) {
+                    printf("nodes %10d, depth %2d, value %10s (%7d), occ %.2lf%%\n", nodes, depth, get_score(score).c_str(), score, m_tt.occupied() * 100.0);
+                }
+
+                alpha = score - config.m_window * 100;
+                beta = score + config.m_window * 100;
 
                 depth += 1;
             }
 
             if (verbose) {
-                printf("nodes %d\n", m_searched);
+                int nodes = 0;
+                for (int i = 0; i < m_threads; ++i) {
+                    nodes += computers[i].m_searched;
+                }
+
+                printf("total nodes %10d\n", nodes);
             }
+
+
             return best_move;
+
+
+            //            bool extended = false;
+            //
+            //            while (depth <= max_depth) {
+            //                pv_line.clear();
+            //                move null = move::null();
+            //                int score = negamax(depth, 0, alpha, beta, pv_line, null);
+            //
+            //                bool ok = alpha < score && score < beta;
+            //                if (!pv_line.empty()) {
+            //                    if (m_timer.m_is_stopped) {
+            //                        if (alpha != -param::inf) {
+            //                            best_move = pv_line[0];
+            //                        }
+            //                    } else if (ok) {
+            //                        best_move = pv_line[0];
+            //                    }
+            //                }
+            //
+            //
+            //                if (verbose) {
+            //                    std::chrono::milliseconds now = m_timer.now();
+            //                    long delta = (now - last).count();
+            //                    int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
+            //                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, occ %.2lf%%, ", depth, m_searched, m_astar_searched,
+            //                           get_score(score).c_str(), score, nps, m_tt.occupied() * 100.0);
+            //
+            //                    printf("pv = [ ");
+            //                    for (auto m: pv_line) {
+            //                        std::cout << m.display() << ", ";
+            //                    }
+            //                    printf("]\n");
+            //
+            //                    last = now;
+            //                    last_searched = m_searched;
+            //                }
+            //
+            //
+            //                if (m_timer.m_is_stopped) {
+            //                    break;
+            //                }
+            //
+            //                if (!ok) {
+            //                    alpha = -param::inf;
+            //                    beta = param::inf;
+            //
+            //                    // restart
+            //                    if (depth >= 6 && !extended) {
+            //                        m_timer.add(ts / 2);
+            //                        extended = true;
+            //                    }
+            //
+            //                    continue;
+            //                }
+            //
+            //
+            //                if (new_score != nullptr) {
+            //                    *new_score = score;
+            //                }
+            //
+            //                alpha = score - m_config.m_window * 100;
+            //                beta = score + m_config.m_window * 100;
+            //
+            //                depth += 1;
+            //            }
+            //
+            //            if (verbose) {
+            //                printf("nodes %d\n", m_searched);
+            //            }
+            //            return best_move;
         }
     };
 

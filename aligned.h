@@ -75,24 +75,4 @@ public:
     }
 };
 
-
-class test {
-public:
-    int m_a;
-    int get() {
-        return 0;
-    }
-
-    static int static_get() {
-        return 0;
-    }
-};
-
-void testing() {
-    test t;
-    t.get();
-    auto t_method = &test::get;
-}
-
-
 #endif//FRECKER_ALIGNED_H
