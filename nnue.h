@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace nnue {
-    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<13));
+    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<6)-5);
     constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
@@ -26,15 +26,15 @@ namespace nnue {
     class crelu {
     public:
         uint64_t m_inputs;
-        AlignedVector<int32_t> m_output;
+        AlignedVector<int16_t> m_output;
 
         explicit crelu(uint64_t inputs) : m_inputs(inputs), m_output(inputs, 0) {}
 
-        static inline int32_t clipped_relu(int32_t x) {
-            return static_cast<int32_t>(std::max((int32_t)WEIGHT_ZERO, std::min((int32_t)WEIGHT8_SCALE, x)));
+        static inline int16_t clipped_relu(int16_t x) {
+            return static_cast<int16_t>(std::max((int16_t)WEIGHT_ZERO, std::min((int16_t)WEIGHT8_SCALE, x)));
         }
 
-        void forward(const AlignedVector<int32_t> &x) {
+        void forward(const AlignedVector<int16_t> &x) {
             for (int i = 0; i < m_inputs; ++i) {
                 m_output[i] = clipped_relu(x[i]);
             }
@@ -62,7 +62,7 @@ namespace nnue {
     public:
         AlignedVector<int16_t> m_weights;
         AlignedVector<int16_t> m_biases;
-        AlignedVector<int32_t> m_output;
+        AlignedVector<int16_t> m_output;
         uint64_t m_inputs;
         uint64_t m_outputs;
 
@@ -76,13 +76,13 @@ namespace nnue {
                 for (int i = 0; i < m_inputs * m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_weights.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT8_SCALE)));
+                    m_weights.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
                     double tmp = 0.0;
                     file >> tmp;
-                    m_biases.push_back(static_cast<int16_t>(round(std::min(1.96, std::max(-1.96, tmp)) * WEIGHT8_SCALE)));
+                    m_biases.push_back(static_cast<int16_t>(round(std::min(2.0, std::max(-2.0, tmp)) * WEIGHT8_SCALE)));
                 }
 
                 for (int i = 0; i < m_outputs; ++i) {
@@ -93,7 +93,7 @@ namespace nnue {
             }
         }
 
-        void forward(const AlignedVector<int32_t> &x) {
+        void forward(const AlignedVector<int16_t> &x) {
             {
                 for (int i = 0; i < m_outputs; ++i) {
                     m_output[i] = 0;
@@ -113,7 +113,7 @@ namespace nnue {
                 for (int j = 0; j < m_inputs; ++j) {
                     size_t offset = j * m_outputs;
                     for (int i = 0; i < m_outputs; ++i) {
-                        m_output[i] += m_weights[offset + i] * x[j];
+                        m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
                     }
                 }
 
@@ -253,10 +253,10 @@ namespace nnue {
         crelu m_relu3;
         layer m_layer4;
 
-        AlignedVector<int32_t> m_accum_output;
+        AlignedVector<int16_t> m_accum_output;
 
         // caching
-        int32_t m_last_pst;
+        int m_last_pst;
         bool m_changed;
         int m_last_flip;
 
@@ -284,8 +284,8 @@ namespace nnue {
                 i *= WEIGHT8_SCALE;
             }
 
-            AlignedVector<int32_t> aligned_red(red.begin(), red.end());
-            AlignedVector<int32_t> aligned_blue(blue.begin(), blue.end());
+            AlignedVector<int16_t> aligned_red(red.begin(), red.end());
+            AlignedVector<int16_t> aligned_blue(blue.begin(), blue.end());
             m_red_accum.forward(aligned_red);
             m_blue_accum.forward(aligned_blue);
             set_changed();
@@ -339,8 +339,8 @@ namespace nnue {
                 //                    }
                 //                }
 
-                int32_t red_pst = m_red_accum.m_output[m_red_accum.m_outputs - 4 + idx];
-                int32_t blue_pst = m_blue_accum.m_output[m_blue_accum.m_outputs - 4 + idx];
+                int red_pst = m_red_accum.m_output[m_red_accum.m_outputs - 4 + idx];
+                int blue_pst = m_blue_accum.m_output[m_blue_accum.m_outputs - 4 + idx];
                 if (flip) {
                     m_last_pst = (blue_pst - red_pst);
                 } else {
@@ -358,7 +358,7 @@ namespace nnue {
             }
 
             int eval = static_cast<int>(m_layer4.m_output[0]);
-            return (eval * 40 * 100 + static_cast<int>(m_last_pst) * 40 * 100 / 2) / WEIGHT8_SCALE;
+            return (eval * 40 * 100 + m_last_pst * 40 * 100 / 2) / WEIGHT8_SCALE;
         }
 
         void push_red(int idx) {

@@ -123,6 +123,10 @@ namespace engine {
             m_forced_stopped = true;
         }
 
+        void unstop() {
+            m_forced_stopped = false;
+        }
+
         void start(int ts) {
             m_target = now() + std::chrono::milliseconds(ts);
             m_is_stopped = false;
@@ -982,6 +986,7 @@ namespace engine {
                 }
             }
 
+            entry = m_tt.probe(m_pos.get_hash());
             if (depth > entry.m_depth && !m_timer.is_stopped()) {
                 entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
@@ -1174,7 +1179,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(threads), m_tt(512) {
+            : m_threads(threads), m_pool(threads), m_tt(2048) {
         }
 
 
@@ -1285,15 +1290,17 @@ namespace engine {
 
             std::vector<int> scores(m_threads);
             std::vector<move> best_moves(m_threads);
+            std::atomic<int> finished_tasks = 0;
+            std::atomic<bool> is_finished = false;
+
             while (depth <= max_depth) {
-                // set timers
                 for (int i = 0; i < m_threads; ++i) {
-                    computers[i].m_timer = m_timer;
+                    computers[i].m_timer.unstop();
                 }
 
-                // start search with variation
-                std::atomic<int> finished_tasks = 0;
-                std::atomic<bool> is_finished = false;
+                // start helper search
+                is_finished = false;
+                finished_tasks = 0;
                 for (int i = 0; i < m_threads; ++i) {
                     if (i == rootEngine) {
                         continue;
@@ -1305,12 +1312,24 @@ namespace engine {
                             pos,
                             alpha,
                             beta,
-                            depth,
+                            depth - i % 2,
                             best_moves[i],
                             scores[i]};
                     int threads = m_threads;
-                    m_pool.enqueue([context, &finished_tasks, &is_finished, &threads, this]() {
-                        search_once(context, finished_tasks, is_finished, threads);
+                    m_pool.enqueue([context, &finished_tasks, &is_finished, threads]() {
+                        std::vector<move> pv_line;
+                        move null = move::null();
+                        int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
+                        context.score = score;
+                        if (!pv_line.empty())
+                            context.best_move = pv_line[0];
+
+
+                        finished_tasks += 1;
+                        if (finished_tasks == threads - 1) {
+                            is_finished = true;
+                            is_finished.notify_one();
+                        }
                     });
                 }
 
@@ -1324,7 +1343,12 @@ namespace engine {
                         depth,
                         best_moves[rootEngine],
                         scores[rootEngine]};
-                search_once(context, finished_tasks, is_finished, m_threads);
+                std::vector<move> pv_line;
+                move null = move::null();
+                int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
+                context.score = score;
+                if (!pv_line.empty())
+                    context.best_move = pv_line[0];
 
                 // when root search stopped,
                 // stop the other engines
@@ -1335,12 +1359,24 @@ namespace engine {
                 // wait until threads finished
                 is_finished.wait(false);
 
-                int score = scores[rootEngine];
-                move most_frequent = best_moves[rootEngine];
+                // check if timer exceeds
+                m_timer.check();
+                if (m_timer.is_stopped()) {
+                    break;
+                }
+
+                // check aspiration
+                if (score <= alpha || score >= beta) {
+                    // re-search
+                    alpha = -param::inf;
+                    beta = param::inf;
+                    continue;
+                }
+
+                // update and stuff
                 if (new_score != nullptr)
                     *new_score = score;
-                best_move = most_frequent;
-
+                best_move = best_moves[rootEngine];
 
                 if (verbose) {
                     int nodes = 0;
@@ -1354,12 +1390,6 @@ namespace engine {
                 beta = score + config.m_window * 100;
 
                 depth += 1;
-
-                // check if timer exceeds
-                m_timer.check();
-                if (m_timer.is_stopped()) {
-                    break;
-                }
             }
 
             if (verbose) {
