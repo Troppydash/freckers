@@ -19,7 +19,7 @@
 
 namespace board {
     using mask = uint64_t;
-    using hash = unsigned __int128;
+    using hash = uint64_t;
 
     const int RED = 0;
     const int BLUE = 1;
@@ -381,15 +381,13 @@ namespace board {
             std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
             for (int i = 0; i < 64; ++i) {
                 for (int k = 0; k < 3; ++k) {
-                    m_position_hashes[i][k] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
+                    m_position_hashes[i][k] = dist(rng);
                 }
             }
 
-            m_turn_hash[0] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
-            m_turn_hash[1] = dist(rng) + (static_cast<hash>(dist(rng)) << 64);
+            m_turn_hash[0] = dist(rng);
+            m_turn_hash[1] = dist(rng);
             m_hash = 0;
-
-            std::cout << "created\n";
         }
 
         void init(board::mask red, board::mask blue, board::mask lily) {

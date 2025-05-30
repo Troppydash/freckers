@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace nnue {
-    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<6));
+    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<13));
     constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
@@ -113,7 +113,7 @@ namespace nnue {
                 for (int j = 0; j < m_inputs; ++j) {
                     size_t offset = j * m_outputs;
                     for (int i = 0; i < m_outputs; ++i) {
-                        m_output[i] += static_cast<int16_t>(m_weights[offset + i] * x[j]);
+                        m_output[i] += m_weights[offset + i] * x[j];
                     }
                 }
 
@@ -199,7 +199,7 @@ namespace nnue {
 
         void update_add(int idx) {
             for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] += static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+                m_output[i] += (m_weights[idx * m_outputs + i]);
             }
 
             //            constexpr uint64_t register_width = 256 / 16;
@@ -221,7 +221,7 @@ namespace nnue {
 
         void update_sub(int idx) {
             for (int i = 0; i < m_outputs; ++i) {
-                m_output[i] -= static_cast<int16_t>(m_weights[idx * m_outputs + i]);
+                m_output[i] -= (m_weights[idx * m_outputs + i]);
             }
 
             //            constexpr uint64_t register_width = 256 / 16;

@@ -113,13 +113,20 @@ namespace engine {
     };
 
     class timer {
-    public:
+    private:
         std::chrono::milliseconds m_target;
-        bool m_is_stopped;
+        bool m_is_stopped = false;
+        bool m_forced_stopped = false;
+
+    public:
+        void stop() {
+            m_forced_stopped = true;
+        }
 
         void start(int ts) {
             m_target = now() + std::chrono::milliseconds(ts);
             m_is_stopped = false;
+            m_forced_stopped = false;
         }
 
         void add(int ts) {
@@ -127,8 +134,16 @@ namespace engine {
             m_is_stopped = false;
         }
 
+        bool is_force_stopped() const {
+            return m_forced_stopped;
+        }
+
+        bool is_stopped() const {
+            return m_is_stopped || m_forced_stopped;
+        }
+
         void check() {
-            if (m_is_stopped)
+            if (m_is_stopped || m_forced_stopped)
                 return;
 
             auto current = now();
@@ -587,7 +602,7 @@ namespace engine {
                 m_timer.check();
             }
 
-            if (m_timer.m_is_stopped) {
+            if (m_timer.is_stopped()) {
                 return 0;
             }
 
@@ -631,7 +646,7 @@ namespace engine {
                 m_pos.pop(move);
                 pop_nnue(move);
 
-                if (m_timer.m_is_stopped) {
+                if (m_timer.is_stopped()) {
                     return 0;
                 }
 
@@ -735,7 +750,7 @@ namespace engine {
                 m_timer.check();
             }
 
-            if (m_timer.m_is_stopped) {
+            if (m_timer.is_stopped()) {
                 return 0;
             }
 
@@ -806,7 +821,7 @@ namespace engine {
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
                 m_pos.pop(null);
 
-                if (m_timer.m_is_stopped) {
+                if (m_timer.is_stopped()) {
                     return 0;
                 }
 
@@ -923,7 +938,7 @@ namespace engine {
                 m_pos.pop(move);
                 pop_nnue(move);
 
-                if (m_timer.m_is_stopped) {
+                if (m_timer.is_stopped()) {
                     return 0;
                 }
 
@@ -967,7 +982,7 @@ namespace engine {
                 }
             }
 
-            if (depth > entry.m_depth && !m_timer.m_is_stopped) {
+            if (depth > entry.m_depth && !m_timer.is_stopped()) {
                 entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
 
@@ -1138,6 +1153,18 @@ namespace engine {
     };
 
 
+    class lazysmp_thread_context {
+    public:
+        int i;
+        engine::computer &computer;
+        board::pos pos;
+        int alpha;
+        int beta;
+        int depth;
+        move &best_move;
+        int &score;
+    };
+
     class lazysmp {
     public:
         timer m_timer;
@@ -1146,7 +1173,8 @@ namespace engine {
         table m_tt;
 
         explicit lazysmp(int threads)
-            : m_threads(threads), m_pool(threads), m_tt(1024) {
+            // need one less thread since we are the main thread
+            : m_threads(threads), m_pool(threads), m_tt(512) {
         }
 
 
@@ -1164,34 +1192,96 @@ namespace engine {
             return std::to_string((double) score / 100);
         }
 
+        void search_once(lazysmp_thread_context context, std::atomic<int> &finished_tasks, std::atomic<bool> &is_finished, int threads) {
+            int alpha = context.alpha;
+            int beta = context.beta;
+            int depth = context.depth;
+            //            context.computer.m_pos = context.pos;
+
+            while (true) {
+                std::vector<move> pv_line;
+                move null = move::null();
+                int score = context.computer.negamax(depth - context.i % 2, 0, alpha, beta, pv_line, null);
+
+                // dont use this at all
+                if (m_timer.is_force_stopped()) {
+                    finished_tasks += 1;
+                    if (finished_tasks == threads) {
+                        is_finished = true;
+                        is_finished.notify_one();
+                    }
+                    return;
+                }
+
+                bool ok = alpha < score && score < beta;
+                if (!pv_line.empty()) {
+                    if (context.computer.m_timer.is_stopped()) {
+                        if (alpha != -param::inf) {
+                            context.best_move = pv_line[0];
+                        }
+                    } else if (ok) {
+                        context.best_move = pv_line[0];
+                    }
+                }
+
+                if (context.computer.m_timer.is_stopped()) {
+                    finished_tasks += 1;
+                    if (finished_tasks == threads) {
+                        is_finished = true;
+                        is_finished.notify_one();
+                    }
+                    return;
+                }
+
+
+                if (!ok) {
+                    alpha = -param::inf;
+                    beta = param::inf;
+                    continue;
+                }
+
+                context.score = score;
+
+                finished_tasks += 1;
+                if (finished_tasks == threads) {
+                    is_finished = true;
+                    is_finished.notify_one();
+                }
+                return;
+            }
+        }
+
+
         move search(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
+            ts += ts / 2;
             m_timer.start(ts);
 
             // setup
             std::vector<computer> computers;
+
             for (int i = 0; i < m_threads; ++i) {
                 computer comp{pos, m_tt, m_timer, weights, config};
                 comp.init();
-                computers.emplace_back(comp);
+                computers.emplace_back(std::move(comp));
             }
+            int rootEngine = 0;
 
             if (verbose)
                 printf("searching with %d threads\n", m_threads);
 
             // search depth one fully using the first comp
-            int depth = 1;
             std::vector<move> pv_line;
             move null = move::null();
             int alpha = -param::inf;
             int beta = param::inf;
-            int score = computers[0].negamax(depth, 0, alpha, beta, pv_line, null);
+            int depth = 1;
+            int score = computers[rootEngine].negamax(depth, 0, alpha, beta, pv_line, null);
+            depth += 1;
             move best_move = pv_line[0];
             if (new_score != nullptr)
                 *new_score = score;
-            depth += 1;
             alpha = score - config.m_window * 100;
             beta = score + config.m_window * 100;
-
 
             std::vector<int> scores(m_threads);
             std::vector<move> best_moves(m_threads);
@@ -1205,95 +1295,58 @@ namespace engine {
                 std::atomic<int> finished_tasks = 0;
                 std::atomic<bool> is_finished = false;
                 for (int i = 0; i < m_threads; ++i) {
+                    if (i == rootEngine) {
+                        continue;
+                    }
+
+                    lazysmp_thread_context context{
+                            i,
+                            computers[i],
+                            pos,
+                            alpha,
+                            beta,
+                            depth,
+                            best_moves[i],
+                            scores[i]};
                     int threads = m_threads;
-                    m_pool.enqueue([&, i, alpha, beta, threads]() {
-                        int a = alpha;
-                        int b = beta;
-
-                        while (true) {
-                            std::vector<move> pv_line;
-                            move null = move::null();
-                            computer &comp = computers[i];
-                            int score = comp.negamax(depth + i % 2, 0, a, b, pv_line, null);
-
-                            bool ok = a < score && score < b;
-                            if (!pv_line.empty()) {
-                                if (comp.m_timer.m_is_stopped) {
-                                    if (a != -param::inf) {
-                                        best_moves[i] = pv_line[0];
-                                    }
-                                } else if (ok) {
-                                    best_moves[i] = pv_line[0];
-                                }
-                            }
-
-                            if (comp.m_timer.m_is_stopped) {
-                                finished_tasks += 1;
-                                if (finished_tasks == threads) {
-                                    is_finished = true;
-                                    is_finished.notify_one();
-                                }
-                                return;
-                            }
-
-
-                            if (!ok) {
-                                a = -param::inf;
-                                b = param::inf;
-                                continue;
-                            }
-
-                            scores[i] = score;
-
-                            finished_tasks += 1;
-                            if (finished_tasks == threads) {
-                                is_finished = true;
-                                is_finished.notify_one();
-                            }
-                            return;
-                        }
+                    m_pool.enqueue([context, &finished_tasks, &is_finished, &threads, this]() {
+                        search_once(context, finished_tasks, is_finished, threads);
                     });
+                }
+
+                // run root search
+                lazysmp_thread_context context{
+                        rootEngine,
+                        computers[rootEngine],
+                        pos,
+                        alpha,
+                        beta,
+                        depth,
+                        best_moves[rootEngine],
+                        scores[rootEngine]};
+                search_once(context, finished_tasks, is_finished, m_threads);
+
+                // when root search stopped,
+                // stop the other engines
+                for (int i = 0; i < m_threads; ++i) {
+                    computers[i].m_timer.stop();
                 }
 
                 // wait until threads finished
                 is_finished.wait(false);
 
-                // check if timer exceeds
-                m_timer.check();
-                if (m_timer.m_is_stopped) {
-                    break;
-                }
-
-                // merge best_moves
-                int most_frequent_count = 0;
-                move most_frequent = null;
-                std::map<move, int> frequency;
-                for (int i = 0; i < m_threads; ++i) {
-                    frequency[best_moves[i]] += 1;
-                    if (frequency[best_moves[i]] > most_frequent_count) {
-                        most_frequent_count = frequency[best_moves[i]];
-                        most_frequent = best_moves[i];
-                    }
-                }
-
-                int score = 0;
-                for (int i = 0; i < m_threads; ++i) {
-                    if (best_moves[i] == most_frequent) {
-                        score += scores[i];
-                    }
-                }
-
-                score = score / frequency[most_frequent];
+                int score = scores[rootEngine];
+                move most_frequent = best_moves[rootEngine];
                 if (new_score != nullptr)
                     *new_score = score;
                 best_move = most_frequent;
 
-                int nodes = 0;
-                for (int i = 0; i < m_threads; ++i) {
-                    nodes += computers[i].m_searched;
-                }
 
                 if (verbose) {
+                    int nodes = 0;
+                    for (int i = 0; i < m_threads; ++i) {
+                        nodes += computers[i].m_searched;
+                    }
                     printf("nodes %10d, depth %2d, value %10s (%7d), occ %.2lf%%\n", nodes, depth, get_score(score).c_str(), score, m_tt.occupied() * 100.0);
                 }
 
@@ -1301,6 +1354,12 @@ namespace engine {
                 beta = score + config.m_window * 100;
 
                 depth += 1;
+
+                // check if timer exceeds
+                m_timer.check();
+                if (m_timer.is_stopped()) {
+                    break;
+                }
             }
 
             if (verbose) {
@@ -1314,77 +1373,6 @@ namespace engine {
 
 
             return best_move;
-
-
-            //            bool extended = false;
-            //
-            //            while (depth <= max_depth) {
-            //                pv_line.clear();
-            //                move null = move::null();
-            //                int score = negamax(depth, 0, alpha, beta, pv_line, null);
-            //
-            //                bool ok = alpha < score && score < beta;
-            //                if (!pv_line.empty()) {
-            //                    if (m_timer.m_is_stopped) {
-            //                        if (alpha != -param::inf) {
-            //                            best_move = pv_line[0];
-            //                        }
-            //                    } else if (ok) {
-            //                        best_move = pv_line[0];
-            //                    }
-            //                }
-            //
-            //
-            //                if (verbose) {
-            //                    std::chrono::milliseconds now = m_timer.now();
-            //                    long delta = (now - last).count();
-            //                    int nps = (m_searched - last_searched) / std::max(1, (int) delta) * 1000;
-            //                    printf("[info] depth %2d, nodes %10d + %10d, value %10s (%7d), nps %10d, occ %.2lf%%, ", depth, m_searched, m_astar_searched,
-            //                           get_score(score).c_str(), score, nps, m_tt.occupied() * 100.0);
-            //
-            //                    printf("pv = [ ");
-            //                    for (auto m: pv_line) {
-            //                        std::cout << m.display() << ", ";
-            //                    }
-            //                    printf("]\n");
-            //
-            //                    last = now;
-            //                    last_searched = m_searched;
-            //                }
-            //
-            //
-            //                if (m_timer.m_is_stopped) {
-            //                    break;
-            //                }
-            //
-            //                if (!ok) {
-            //                    alpha = -param::inf;
-            //                    beta = param::inf;
-            //
-            //                    // restart
-            //                    if (depth >= 6 && !extended) {
-            //                        m_timer.add(ts / 2);
-            //                        extended = true;
-            //                    }
-            //
-            //                    continue;
-            //                }
-            //
-            //
-            //                if (new_score != nullptr) {
-            //                    *new_score = score;
-            //                }
-            //
-            //                alpha = score - m_config.m_window * 100;
-            //                beta = score + m_config.m_window * 100;
-            //
-            //                depth += 1;
-            //            }
-            //
-            //            if (verbose) {
-            //                printf("nodes %d\n", m_searched);
-            //            }
-            //            return best_move;
         }
     };
 
@@ -1405,7 +1393,7 @@ namespace engine {
         }
 
         int ponder() {
-            if (m_computer.m_timer.m_is_stopped) {
+            if (m_computer.m_timer.is_stopped()) {
                 return m_score;
             }
 
@@ -1414,7 +1402,7 @@ namespace engine {
             m_line.clear();
             move null = move::null();
             int score = m_computer.negamax(m_depth, 0, alpha, beta, m_line, null);
-            if (m_computer.m_timer.m_is_stopped) {
+            if (m_computer.m_timer.is_stopped()) {
                 return m_score;
             }
 
