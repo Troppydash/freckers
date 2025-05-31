@@ -1179,7 +1179,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(), m_tt(4086) {
+            : m_threads(threads), m_pool(), m_tt(1024) {
         }
 
 
@@ -1269,19 +1269,33 @@ namespace engine {
                             depths[i]};
                     int threads = m_threads;
                     m_pool.enqueue([context, &finished_tasks, &is_finished, threads]() {
-                        std::vector<move> pv_line;
-                        move null = move::null();
-                        int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
+                        int alpha = context.alpha;
+                        int beta = context.beta;
+                        while (true) {
+                            std::vector<move> pv_line;
+                            move null = move::null();
+                            int score = context.computer.negamax(context.depth, 0,alpha, beta, pv_line, null);
 
-                        if (context.computer.m_timer.is_force_stopped()) {
-                            context.best_move = {};
-                            context.depths = 0;
-                            context.score = 0;
-                        } else {
-                            context.best_move = pv_line;
-                            context.depths = context.depth;
-                            context.score = score;
+                            if (context.computer.m_timer.is_stopped()) {
+                                context.best_move = {};
+                                context.depths = 0;
+                                context.score = 0;
+                                break;
+                            } else {
+                                // useless eval if outside the asp window, so why not research
+                                if (score <= alpha || score >= beta) {
+                                    alpha = -param::inf;
+                                    beta = -param::inf;
+                                    continue;
+                                }
+
+                                context.best_move = pv_line;
+                                context.depths = context.depth;
+                                context.score = score;
+                                break;
+                            }
                         }
+
 
                         finished_tasks += 1;
                         if (finished_tasks == threads - 1) {
