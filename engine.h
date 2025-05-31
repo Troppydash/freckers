@@ -1179,7 +1179,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(), m_tt(1024) {
+            : m_threads(threads), m_pool(), m_tt(512) {
         }
 
 
@@ -1197,6 +1197,10 @@ namespace engine {
             std::stringstream stream;
             stream << std::fixed << std::setprecision(2) << (double) score / 100;
             return stream.str();
+        }
+
+        int thread_value(int score, int worse_score, int depth) {
+            return (score - worse_score) + 300 * depth;
         }
 
 
@@ -1245,15 +1249,12 @@ namespace engine {
                 for (int i = 0; i < m_threads; ++i) {
                     computers[i].m_timer = m_timer;
                     computers[i].m_pos = pos;
-                    computers[i].m_timer.unstop();
                 }
 
                 // start helper search
                 is_finished = false;
                 finished_tasks = 0;
                 for (int i = 0; i < m_threads; ++i) {
-                    computers[i].m_pos = pos;
-
                     if (i == root_thread) {
                         continue;
                     }
@@ -1263,7 +1264,7 @@ namespace engine {
                             computers[i],
                             alpha,
                             beta,
-                            depth + i % 2,
+                            depth + (1-i % 2),
                             best_moves[i],
                             scores[i],
                             depths[i]};
@@ -1274,9 +1275,10 @@ namespace engine {
                         while (true) {
                             std::vector<move> pv_line;
                             move null = move::null();
-                            int score = context.computer.negamax(context.depth, 0,alpha, beta, pv_line, null);
+                            int score = context.computer.negamax(context.depth, 0, alpha, beta, pv_line, null);
 
                             if (context.computer.m_timer.is_stopped()) {
+                                // dont update
                                 context.best_move = {};
                                 context.depths = 0;
                                 context.score = 0;
@@ -1285,7 +1287,7 @@ namespace engine {
                                 // useless eval if outside the asp window, so why not research
                                 if (score <= alpha || score >= beta) {
                                     alpha = -param::inf;
-                                    beta = -param::inf;
+                                    beta = param::inf;
                                     continue;
                                 }
 
@@ -1311,7 +1313,7 @@ namespace engine {
                         computers[root_thread],
                         alpha,
                         beta,
-                        depth + root_thread % 2,
+                        depth + (1-root_thread % 2),
                         best_moves[root_thread],
                         scores[root_thread],
                         depths[root_thread]};
@@ -1338,9 +1340,6 @@ namespace engine {
                 }
 
                 // check aspiration
-                //                for (int i = 0; i < m_threads; ++i) {
-                //                    int score = scores[i];
-                //                }
                 if (score <= alpha || score >= beta) {
                     // re-search
                     alpha = -param::inf;
@@ -1361,7 +1360,7 @@ namespace engine {
                 for (int i = 0; i < m_threads; ++i) {
                     // compute thread value, favor depth than score
                     if (!best_moves[i].empty() && scores[i] > alpha && scores[i] < beta) {
-                        int threadvalue = (scores[i] - worse_score) + 200*depths[i];
+                        int threadvalue = thread_value(scores[i], worse_score, depths[i]);
                         vote[best_moves[i][0]] += threadvalue;
                     }
                 }
@@ -1390,7 +1389,7 @@ namespace engine {
                             best_vote_score = current_vote_score;
                         }
                     } else if (current_vote_score > -param::checkmate) {
-                        if (current_vote_score > best_vote_score) {
+                        if (current_vote_score > best_vote_score || (current_vote_score == best_vote_score && (thread_value(current_score, worse_score, depths[i]) > thread_value(scores[best_thread], worse_score, depths[best_thread])))) {
                             best_thread = i;
                             best_score = current_score;
                             best_vote_score = current_vote_score;

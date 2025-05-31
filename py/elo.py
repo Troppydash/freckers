@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 700
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
