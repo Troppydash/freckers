@@ -16,25 +16,25 @@
 #include <vector>
 
 namespace nnue {
-    constexpr int16_t WEIGHT8_SCALE = static_cast<int16_t>((1<<6)-5);
-    constexpr int16_t WEIGHT_ZERO = static_cast<int16_t>(0);
+    constexpr int32_t WEIGHT8_SCALE = static_cast<int16_t>((1<<13));
+    constexpr int32_t WEIGHT_ZERO = static_cast<int16_t>(0);
 
 
-    template<typename T, std::size_t ALIGNMENT_IN_BYTES = 16>
+    template<typename T, std::size_t ALIGNMENT_IN_BYTES = 32>
     using AlignedVector = std::vector<T, AlignedAllocator<T, ALIGNMENT_IN_BYTES>>;
 
     class crelu {
     public:
         uint64_t m_inputs;
-        AlignedVector<int16_t> m_output;
+        AlignedVector<int32_t> m_output;
 
         explicit crelu(uint64_t inputs) : m_inputs(inputs), m_output(inputs, 0) {}
 
-        static inline int16_t clipped_relu(int16_t x) {
-            return static_cast<int16_t>(std::max((int16_t)WEIGHT_ZERO, std::min((int16_t)WEIGHT8_SCALE, x)));
+        static inline int32_t clipped_relu(int32_t x) {
+            return static_cast<int32_t>(std::max((int32_t)WEIGHT_ZERO, std::min((int32_t)WEIGHT8_SCALE, x)));
         }
 
-        void forward(const AlignedVector<int16_t> &x) {
+        void forward(const AlignedVector<int32_t> &x) {
             for (int i = 0; i < m_inputs; ++i) {
                 m_output[i] = clipped_relu(x[i]);
             }
@@ -62,7 +62,7 @@ namespace nnue {
     public:
         AlignedVector<int16_t> m_weights;
         AlignedVector<int16_t> m_biases;
-        AlignedVector<int16_t> m_output;
+        AlignedVector<int32_t> m_output;
         uint64_t m_inputs;
         uint64_t m_outputs;
 
@@ -93,7 +93,7 @@ namespace nnue {
             }
         }
 
-        void forward(const AlignedVector<int16_t> &x) {
+        void forward(const AlignedVector<int32_t> &x) {
             {
                 for (int i = 0; i < m_outputs; ++i) {
                     m_output[i] = 0;
@@ -113,7 +113,7 @@ namespace nnue {
                 for (int j = 0; j < m_inputs; ++j) {
                     size_t offset = j * m_outputs;
                     for (int i = 0; i < m_outputs; ++i) {
-                        m_output[i] += static_cast<int16_t>(m_weights[offset + i]) * x[j];
+                        m_output[i] += static_cast<int32_t>(m_weights[offset + i]) * x[j];
                     }
                 }
 
@@ -253,7 +253,7 @@ namespace nnue {
         crelu m_relu3;
         layer m_layer4;
 
-        AlignedVector<int16_t> m_accum_output;
+        AlignedVector<int32_t> m_accum_output;
 
         // caching
         int m_last_pst;
@@ -284,8 +284,8 @@ namespace nnue {
                 i *= WEIGHT8_SCALE;
             }
 
-            AlignedVector<int16_t> aligned_red(red.begin(), red.end());
-            AlignedVector<int16_t> aligned_blue(blue.begin(), blue.end());
+            AlignedVector<int32_t> aligned_red(red.begin(), red.end());
+            AlignedVector<int32_t> aligned_blue(blue.begin(), blue.end());
             m_red_accum.forward(aligned_red);
             m_blue_accum.forward(aligned_blue);
             set_changed();

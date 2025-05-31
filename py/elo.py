@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 300
+    ts = 500
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -64,7 +64,7 @@ def round(agents, elos, names):
     n = len(agents)
     k = 30
 
-    with multiprocessing.Pool(8) as p:
+    with multiprocessing.Pool(6) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):

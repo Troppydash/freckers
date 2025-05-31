@@ -13,6 +13,7 @@
 #include <array>
 #include <chrono>
 #include <cinttypes>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <random>
@@ -179,7 +180,7 @@ namespace engine {
 
 
         computer_config() {
-            m_lmp_margins = {0, 6, 14, 14, 18, 23};
+            m_lmp_margins = {0, 6, 14, 16, 18, 23};
             m_lmr_depth = 3;
             m_lmr_move = 7;
             m_tempo = 55;
@@ -187,7 +188,7 @@ namespace engine {
             m_countermove = 7;
             m_lily_min = 3;
             m_lily_scale = 9;
-            m_window = 3;
+            m_window = 5;
             m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
         }
 
@@ -986,7 +987,6 @@ namespace engine {
                 }
             }
 
-            entry = m_tt.probe(m_pos.get_hash());
             if (depth > entry.m_depth && !m_timer.is_stopped()) {
                 entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
@@ -1162,12 +1162,12 @@ namespace engine {
     public:
         int i;
         engine::computer &computer;
-        board::pos pos;
         int alpha;
         int beta;
         int depth;
-        move &best_move;
+        std::vector<move> &best_move;
         int &score;
+        int &depths;
     };
 
     class lazysmp {
@@ -1179,81 +1179,24 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(threads), m_tt(2048) {
+            : m_threads(threads), m_pool(), m_tt(4086) {
         }
 
 
         std::string get_score(int score) {
             if (score > param::checkmate) {
                 int ply = param::inf - score;
-                return std::string{"game in "} + std::to_string(ply) + " ply";
+                return std::string{"IN "} + std::to_string(ply) + " ply";
             }
 
             if (score < -param::checkmate) {
                 int ply = -param::inf - score;
-                return std::string{"game in "} + std::to_string(ply) + " ply";
+                return std::string{"In "} + std::to_string(ply) + " ply";
             }
 
-            return std::to_string((double) score / 100);
-        }
-
-        void search_once(lazysmp_thread_context context, std::atomic<int> &finished_tasks, std::atomic<bool> &is_finished, int threads) {
-            int alpha = context.alpha;
-            int beta = context.beta;
-            int depth = context.depth;
-            //            context.computer.m_pos = context.pos;
-
-            while (true) {
-                std::vector<move> pv_line;
-                move null = move::null();
-                int score = context.computer.negamax(depth - context.i % 2, 0, alpha, beta, pv_line, null);
-
-                // dont use this at all
-                if (m_timer.is_force_stopped()) {
-                    finished_tasks += 1;
-                    if (finished_tasks == threads) {
-                        is_finished = true;
-                        is_finished.notify_one();
-                    }
-                    return;
-                }
-
-                bool ok = alpha < score && score < beta;
-                if (!pv_line.empty()) {
-                    if (context.computer.m_timer.is_stopped()) {
-                        if (alpha != -param::inf) {
-                            context.best_move = pv_line[0];
-                        }
-                    } else if (ok) {
-                        context.best_move = pv_line[0];
-                    }
-                }
-
-                if (context.computer.m_timer.is_stopped()) {
-                    finished_tasks += 1;
-                    if (finished_tasks == threads) {
-                        is_finished = true;
-                        is_finished.notify_one();
-                    }
-                    return;
-                }
-
-
-                if (!ok) {
-                    alpha = -param::inf;
-                    beta = param::inf;
-                    continue;
-                }
-
-                context.score = score;
-
-                finished_tasks += 1;
-                if (finished_tasks == threads) {
-                    is_finished = true;
-                    is_finished.notify_one();
-                }
-                return;
-            }
+            std::stringstream stream;
+            stream << std::fixed << std::setprecision(2) << (double) score / 100;
+            return stream.str();
         }
 
 
@@ -1269,7 +1212,9 @@ namespace engine {
                 comp.init();
                 computers.emplace_back(std::move(comp));
             }
-            int rootEngine = 0;
+            int root_thread = 0;
+
+            m_timer.start(ts);
 
             if (verbose)
                 printf("searching with %d threads\n", m_threads);
@@ -1280,7 +1225,7 @@ namespace engine {
             int alpha = -param::inf;
             int beta = param::inf;
             int depth = 1;
-            int score = computers[rootEngine].negamax(depth, 0, alpha, beta, pv_line, null);
+            int score = computers[root_thread].negamax(depth, 0, alpha, beta, pv_line, null);
             depth += 1;
             move best_move = pv_line[0];
             if (new_score != nullptr)
@@ -1289,12 +1234,17 @@ namespace engine {
             beta = score + config.m_window * 100;
 
             std::vector<int> scores(m_threads);
-            std::vector<move> best_moves(m_threads);
+            std::vector<std::vector<move>> best_moves(m_threads);
+            std::vector<int> depths(m_threads);
+
+
             std::atomic<int> finished_tasks = 0;
             std::atomic<bool> is_finished = false;
 
             while (depth <= max_depth) {
                 for (int i = 0; i < m_threads; ++i) {
+                    computers[i].m_timer = m_timer;
+                    computers[i].m_pos = pos;
                     computers[i].m_timer.unstop();
                 }
 
@@ -1302,28 +1252,36 @@ namespace engine {
                 is_finished = false;
                 finished_tasks = 0;
                 for (int i = 0; i < m_threads; ++i) {
-                    if (i == rootEngine) {
+                    computers[i].m_pos = pos;
+
+                    if (i == root_thread) {
                         continue;
                     }
 
                     lazysmp_thread_context context{
                             i,
                             computers[i],
-                            pos,
                             alpha,
                             beta,
-                            depth - i % 2,
+                            depth + i % 2,
                             best_moves[i],
-                            scores[i]};
+                            scores[i],
+                            depths[i]};
                     int threads = m_threads;
                     m_pool.enqueue([context, &finished_tasks, &is_finished, threads]() {
                         std::vector<move> pv_line;
                         move null = move::null();
                         int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
-                        context.score = score;
-                        if (!pv_line.empty())
-                            context.best_move = pv_line[0];
 
+                        if (context.computer.m_timer.is_force_stopped()) {
+                            context.best_move = {};
+                            context.depths = 0;
+                            context.score = 0;
+                        } else {
+                            context.best_move = pv_line;
+                            context.depths = context.depth;
+                            context.score = score;
+                        }
 
                         finished_tasks += 1;
                         if (finished_tasks == threads - 1) {
@@ -1335,20 +1293,20 @@ namespace engine {
 
                 // run root search
                 lazysmp_thread_context context{
-                        rootEngine,
-                        computers[rootEngine],
-                        pos,
+                        root_thread,
+                        computers[root_thread],
                         alpha,
                         beta,
-                        depth,
-                        best_moves[rootEngine],
-                        scores[rootEngine]};
+                        depth + root_thread % 2,
+                        best_moves[root_thread],
+                        scores[root_thread],
+                        depths[root_thread]};
                 std::vector<move> pv_line;
                 move null = move::null();
                 int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
                 context.score = score;
-                if (!pv_line.empty())
-                    context.best_move = pv_line[0];
+                context.best_move = pv_line;
+                context.depths = context.depth;
 
                 // when root search stopped,
                 // stop the other engines
@@ -1366,6 +1324,9 @@ namespace engine {
                 }
 
                 // check aspiration
+                //                for (int i = 0; i < m_threads; ++i) {
+                //                    int score = scores[i];
+                //                }
                 if (score <= alpha || score >= beta) {
                     // re-search
                     alpha = -param::inf;
@@ -1373,21 +1334,80 @@ namespace engine {
                     continue;
                 }
 
+                int worse_score = param::inf;
+                std::map<move, int> vote;
+
+                for (int i = 0; i < m_threads; ++i) {
+                    if (!best_moves[i].empty() && scores[i] > alpha && scores[i] < beta) {
+                        worse_score = std::min(worse_score, scores[i]);
+                        vote[best_moves[i][0]] = 0;
+                    }
+                }
+
+                for (int i = 0; i < m_threads; ++i) {
+                    // compute thread value, favor depth than score
+                    if (!best_moves[i].empty() && scores[i] > alpha && scores[i] < beta) {
+                        int threadvalue = (scores[i] - worse_score) + 200*depths[i];
+                        vote[best_moves[i][0]] += threadvalue;
+                    }
+                }
+
+                int best_thread = root_thread;
+                int best_score = scores[root_thread];
+                int best_vote_score = vote[best_moves[root_thread][0]];
+
+                for (int i = 0; i < m_threads; ++i) {
+                    if (i == root_thread) {
+                        continue;
+                    }
+
+                    if (best_moves[i].empty() || !(scores[i] > alpha && scores[i] < beta)) {
+                        continue;
+                    }
+
+                    int current_score = scores[i];
+                    int current_vote_score = vote[best_moves[i][0]];
+
+                    // choose the fastest mate
+                    if (std::abs(best_score) >= param::checkmate) {
+                        if (current_score > best_score) {
+                            best_thread = i;
+                            best_score = current_score;
+                            best_vote_score = current_vote_score;
+                        }
+                    } else if (current_vote_score > -param::checkmate) {
+                        if (current_vote_score > best_vote_score) {
+                            best_thread = i;
+                            best_score = current_score;
+                            best_vote_score = current_vote_score;
+                        }
+                    }
+                }
+
+
+                root_thread = best_thread;
+
                 // update and stuff
                 if (new_score != nullptr)
-                    *new_score = score;
-                best_move = best_moves[rootEngine];
+                    *new_score = best_score;
+                best_move = best_moves[root_thread][0];
 
                 if (verbose) {
                     int nodes = 0;
                     for (int i = 0; i < m_threads; ++i) {
                         nodes += computers[i].m_searched;
                     }
-                    printf("nodes %10d, depth %2d, value %10s (%7d), occ %.2lf%%\n", nodes, depth, get_score(score).c_str(), score, m_tt.occupied() * 100.0);
+                    printf("nodes %10d, depth %2d, value %7s (%5d), occ %.2lf%%", nodes, depth, get_score(score).c_str(), score, m_tt.occupied() * 100.0);
+
+                    printf(", pv = [");
+                    for (auto move: best_moves[root_thread]) {
+                        printf("%s, ", move.display().c_str());
+                    }
+                    printf("]\n");
                 }
 
-                alpha = score - config.m_window * 100;
-                beta = score + config.m_window * 100;
+                alpha = best_score - config.m_window * 100;
+                beta = best_score + config.m_window * 100;
 
                 depth += 1;
             }
@@ -1398,7 +1418,7 @@ namespace engine {
                     nodes += computers[i].m_searched;
                 }
 
-                printf("total nodes %10d\n", nodes);
+                printf("total nodes searched %10d\n", nodes);
             }
 
 
