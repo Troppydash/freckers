@@ -175,6 +175,7 @@ namespace engine {
         int m_lily_scale;
         int m_static_null_move_margin;
         int m_window;
+        int m_window_scale;
 
         std::array<int, 9> m_fut_margins{};
 
@@ -188,8 +189,9 @@ namespace engine {
             m_countermove = 7;
             m_lily_min = 3;
             m_lily_scale = 9;
-            m_window = 5;
+            m_window = 2;
             m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
+            m_window_scale = 2;
         }
 
 
@@ -1157,6 +1159,14 @@ namespace engine {
         //        }
     };
 
+    template<
+            class result_t = std::chrono::microseconds,
+            class clock_t = std::chrono::steady_clock,
+            class duration_t = std::chrono::microseconds>
+    auto since(std::chrono::time_point<clock_t, duration_t> const &start) {
+        return std::chrono::duration_cast<result_t>(clock_t::now() - start);
+    }
+
 
     class lazysmp_thread_context {
     public:
@@ -1200,7 +1210,7 @@ namespace engine {
         }
 
         int thread_value(int score, int worse_score, int depth) {
-            return (score - worse_score) + 300 * depth;
+            return (score - worse_score) + 400 * depth;
         }
 
 
@@ -1234,16 +1244,20 @@ namespace engine {
             move best_move = pv_line[0];
             if (new_score != nullptr)
                 *new_score = score;
-            alpha = score - config.m_window * 100;
-            beta = score + config.m_window * 100;
+
+            int last_score = score;
+            alpha = last_score - config.m_window * 100;
+            beta = last_score + config.m_window * 100;
 
             std::vector<int> scores(m_threads);
             std::vector<std::vector<move>> best_moves(m_threads);
             std::vector<int> depths(m_threads);
+            std::vector<bool> is_ok(m_threads, false);
 
 
             std::atomic<int> finished_tasks = 0;
             std::atomic<bool> is_finished = false;
+
 
             while (depth <= max_depth) {
                 for (int i = 0; i < m_threads; ++i) {
@@ -1264,12 +1278,12 @@ namespace engine {
                             computers[i],
                             alpha,
                             beta,
-                            depth + (1-i % 2),
+                            depth + (1 - i % 2),
                             best_moves[i],
                             scores[i],
                             depths[i]};
                     int threads = m_threads;
-                    m_pool.enqueue([context, &finished_tasks, &is_finished, threads]() {
+                    m_pool.enqueue([context, &finished_tasks, &is_finished, &is_ok, threads, last_score, &config]() {
                         int alpha = context.alpha;
                         int beta = context.beta;
                         while (true) {
@@ -1283,19 +1297,25 @@ namespace engine {
                                 context.depths = 0;
                                 context.score = 0;
                                 break;
-                            } else {
-                                // useless eval if outside the asp window, so why not research
-                                if (score <= alpha || score >= beta) {
-                                    alpha = -param::inf;
-                                    beta = param::inf;
-                                    continue;
-                                }
-
-                                context.best_move = pv_line;
-                                context.depths = context.depth;
-                                context.score = score;
-                                break;
                             }
+
+                            // useless eval if outside the asp window, so why not research
+                            if (score <= alpha || score >= beta) {
+                                if (score <= alpha)
+                                    alpha = last_score + (alpha - last_score) * config.m_window_scale;
+
+                                if (score >= beta)
+                                    beta = last_score + (beta - last_score) * config.m_window_scale;
+
+                                continue;
+                            }
+
+                            context.best_move = pv_line;
+                            context.depths = context.depth;
+                            context.score = score;
+                            is_ok[context.i] = true;
+
+                            break;
                         }
 
 
@@ -1308,21 +1328,44 @@ namespace engine {
                 }
 
                 // run root search
-                lazysmp_thread_context context{
-                        root_thread,
-                        computers[root_thread],
-                        alpha,
-                        beta,
-                        depth + (1-root_thread % 2),
-                        best_moves[root_thread],
-                        scores[root_thread],
-                        depths[root_thread]};
-                std::vector<move> pv_line;
-                move null = move::null();
-                int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
-                context.score = score;
-                context.best_move = pv_line;
-                context.depths = context.depth;
+                while (true) {
+                    lazysmp_thread_context context{
+                            root_thread,
+                            computers[root_thread],
+                            alpha,
+                            beta,
+                            depth + (1 - root_thread % 2),
+                            best_moves[root_thread],
+                            scores[root_thread],
+                            depths[root_thread]};
+                    std::vector<move> pv_line;
+                    int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
+
+                    if (context.computer.m_timer.is_stopped()) {
+                        // dont update
+                        context.best_move = {};
+                        context.depths = 0;
+                        context.score = 0;
+                        break;
+                    }
+
+                    if (score <= alpha || score >= beta) {
+                        if (score <= alpha)
+                            alpha = last_score + (alpha - last_score) * config.m_window_scale;
+
+                        if (score >= beta)
+                            beta = last_score + (beta - last_score) * config.m_window_scale;
+
+                        continue;
+                    }
+
+                    context.best_move = pv_line;
+                    context.depths = context.depth;
+                    context.score = score;
+                    is_ok[root_thread] = true;
+                    break;
+                }
+
 
                 // when root search stopped,
                 // stop the other engines
@@ -1339,19 +1382,11 @@ namespace engine {
                     break;
                 }
 
-                // check aspiration
-                if (score <= alpha || score >= beta) {
-                    // re-search
-                    alpha = -param::inf;
-                    beta = param::inf;
-                    continue;
-                }
-
                 int worse_score = param::inf;
                 std::map<move, int> vote;
 
                 for (int i = 0; i < m_threads; ++i) {
-                    if (!best_moves[i].empty() && scores[i] > alpha && scores[i] < beta) {
+                    if (is_ok[i]) {
                         worse_score = std::min(worse_score, scores[i]);
                         vote[best_moves[i][0]] = 0;
                     }
@@ -1359,7 +1394,7 @@ namespace engine {
 
                 for (int i = 0; i < m_threads; ++i) {
                     // compute thread value, favor depth than score
-                    if (!best_moves[i].empty() && scores[i] > alpha && scores[i] < beta) {
+                    if (is_ok[i]) {
                         int threadvalue = thread_value(scores[i], worse_score, depths[i]);
                         vote[best_moves[i][0]] += threadvalue;
                     }
@@ -1374,7 +1409,7 @@ namespace engine {
                         continue;
                     }
 
-                    if (best_moves[i].empty() || !(scores[i] > alpha && scores[i] < beta)) {
+                    if (!is_ok[i]) {
                         continue;
                     }
 
@@ -1397,20 +1432,20 @@ namespace engine {
                     }
                 }
 
-
                 root_thread = best_thread;
 
                 // update and stuff
                 if (new_score != nullptr)
                     *new_score = best_score;
                 best_move = best_moves[root_thread][0];
+                last_score = best_score;
 
                 if (verbose) {
                     int nodes = 0;
                     for (int i = 0; i < m_threads; ++i) {
                         nodes += computers[i].m_searched;
                     }
-                    printf("nodes %10d, depth %2d, value %7s (%5d), occ %.2lf%%", nodes, depth, get_score(score).c_str(), score, m_tt.occupied() * 100.0);
+                    printf("nodes %10d, depth %2d, value %7s (%5d), occ %.2lf%%", nodes, depth, get_score(best_score).c_str(), best_score, m_tt.occupied() * 100.0);
 
                     printf(", pv = [");
                     for (auto move: best_moves[root_thread]) {
@@ -1419,8 +1454,8 @@ namespace engine {
                     printf("]\n");
                 }
 
-                alpha = best_score - config.m_window * 100;
-                beta = best_score + config.m_window * 100;
+                alpha = last_score - config.m_window * 100;
+                beta = last_score + config.m_window * 100;
 
                 depth += 1;
             }

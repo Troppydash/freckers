@@ -473,7 +473,7 @@ int main() {
 
         if (pos.m_turn == board::RED) {
             printf("start\n");
-            engine::lazysmp lazy(4);
+            engine::lazysmp lazy(10);
             auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
             //            engine::computer engine{pos, get_weights("../")};
             //            auto move = engine.search(2000, nullptr, true);
@@ -482,7 +482,7 @@ int main() {
 
         } else {
             printf("start\n");
-            engine::lazysmp lazy(4);
+            engine::lazysmp lazy(10);
             auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
