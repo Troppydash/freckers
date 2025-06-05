@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 
 
 def playoff(engine1, engine2):
-    ts = 700
+    ts = 1000
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
     pos = Pos()
 
     # random moves
-    left = 7
+    left = 5
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
         # if random.random() < 0.5:
@@ -62,9 +62,9 @@ def play(x):
 
 def round(agents, elos, names):
     n = len(agents)
-    k = 30
+    k = 40
 
-    with multiprocessing.Pool(6) as p:
+    with multiprocessing.Pool(4) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):

@@ -181,7 +181,7 @@ namespace engine {
 
 
         computer_config() {
-            m_lmp_margins = {0, 6, 14, 16, 18, 23};
+            m_lmp_margins = {0, 4, 10, 14, 16, 20};
             m_lmr_depth = 3;
             m_lmr_move = 7;
             m_tempo = 55;
@@ -191,7 +191,7 @@ namespace engine {
             m_lily_scale = 9;
             m_window = 2;
             m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
-            m_window_scale = 2;
+            m_window_scale = 4;
         }
 
 
@@ -1189,7 +1189,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(), m_tt(512) {
+            : m_threads(threads), m_pool(), m_tt(1024) {
         }
 
 
@@ -1209,7 +1209,7 @@ namespace engine {
             return stream.str();
         }
 
-        int thread_value(int score, int worse_score, int depth) {
+        int thread_value(int score, int worse_score, int depth) const {
             return (score - worse_score) + 400 * depth;
         }
 
@@ -1227,8 +1227,6 @@ namespace engine {
                 computers.emplace_back(std::move(comp));
             }
             int root_thread = 0;
-
-            m_timer.start(ts);
 
             if (verbose)
                 printf("searching with %d threads\n", m_threads);
@@ -1252,7 +1250,6 @@ namespace engine {
             std::vector<int> scores(m_threads);
             std::vector<std::vector<move>> best_moves(m_threads);
             std::vector<int> depths(m_threads);
-            std::vector<bool> is_ok(m_threads, false);
 
 
             std::atomic<int> finished_tasks = 0;
@@ -1260,9 +1257,10 @@ namespace engine {
 
 
             while (depth <= max_depth) {
+                std::vector<bool> is_ok(m_threads, false);
+
                 for (int i = 0; i < m_threads; ++i) {
                     computers[i].m_timer = m_timer;
-                    computers[i].m_pos = pos;
                 }
 
                 // start helper search
@@ -1301,11 +1299,19 @@ namespace engine {
 
                             // useless eval if outside the asp window, so why not research
                             if (score <= alpha || score >= beta) {
-                                if (score <= alpha)
+                                if (score <= alpha) {
                                     alpha = last_score + (alpha - last_score) * config.m_window_scale;
+                                    if (alpha < -40 * 100) {
+                                        alpha = -param::inf;
+                                    }
+                                }
 
-                                if (score >= beta)
+                                if (score >= beta) {
                                     beta = last_score + (beta - last_score) * config.m_window_scale;
+                                    if (beta > 40 * 100) {
+                                        beta = param::inf;
+                                    }
+                                }
 
                                 continue;
                             }
@@ -1350,11 +1356,19 @@ namespace engine {
                     }
 
                     if (score <= alpha || score >= beta) {
-                        if (score <= alpha)
+                        if (score <= alpha) {
                             alpha = last_score + (alpha - last_score) * config.m_window_scale;
+                            if (alpha < -40 * 100) {
+                                alpha = -param::inf;
+                            }
+                        }
 
-                        if (score >= beta)
+                        if (score >= beta) {
                             beta = last_score + (beta - last_score) * config.m_window_scale;
+                            if (beta > 40 * 100) {
+                                beta = param::inf;
+                            }
+                        }
 
                         continue;
                     }
@@ -1417,7 +1431,7 @@ namespace engine {
                     int current_vote_score = vote[best_moves[i][0]];
 
                     // choose the fastest mate
-                    if (std::abs(best_score) >= param::checkmate) {
+                    if (std::abs(current_score) >= param::checkmate) {
                         if (current_score > best_score) {
                             best_thread = i;
                             best_score = current_score;
