@@ -437,7 +437,7 @@ namespace engine {
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
-                            if (move == m_counter[m_pos.m_turn][coord.first][coord.second]) {
+                            if (move == m_counter[0][coord.first][coord.second]) {
                                 score += m_config.m_countermove;
                             }
                         }
@@ -487,7 +487,7 @@ namespace engine {
         void incr_counter(const move &prev_move, move &move) {
             if (prev_move.is_storable() && move.is_slient()) {
                 auto coord = prev_move.get_coords();
-                m_counter[m_pos.m_turn][coord.first][coord.second] = move;
+                m_counter[0][coord.first][coord.second] = move;
             }
         }
 
@@ -823,7 +823,7 @@ namespace engine {
                 move null = move::null();
                 m_pos.push(null);
 
-                int r = 3;
+                int r = 3 + depth / 6;
                 std::vector<move> child_pv_line;
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
                 m_pos.pop(null);
@@ -1215,7 +1215,6 @@ namespace engine {
 
 
         move search(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
-            ts += ts / 2;
             m_timer.start(ts);
 
             // setup
@@ -1284,16 +1283,22 @@ namespace engine {
                     m_pool.enqueue([context, &finished_tasks, &is_finished, &is_ok, threads, last_score, &config]() {
                         int alpha = context.alpha;
                         int beta = context.beta;
+                        int depth = context.depth;
+                        bool is_retry = false;
+
                         while (true) {
                             std::vector<move> pv_line;
                             move null = move::null();
-                            int score = context.computer.negamax(context.depth, 0, alpha, beta, pv_line, null);
+                            int score = context.computer.negamax(depth, 0, alpha, beta, pv_line, null);
 
                             if (context.computer.m_timer.is_stopped()) {
-                                // dont update
-                                context.best_move = {};
-                                context.depths = 0;
-                                context.score = 0;
+                                if (!is_retry) {
+                                    // dont update
+                                    context.best_move = {};
+                                    context.depths = 0;
+                                    context.score = 0;
+                                }
+
                                 break;
                             }
 
@@ -1317,11 +1322,13 @@ namespace engine {
                             }
 
                             context.best_move = pv_line;
-                            context.depths = context.depth;
+                            context.depths = depth;
                             context.score = score;
                             is_ok[context.i] = true;
 
-                            break;
+                            // early, so retry higher depth
+                            depth += 1;
+                            is_retry = true;
                         }
 
 
