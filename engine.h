@@ -812,7 +812,7 @@ namespace engine {
                 int stat = evaluate();
                 int score_margin = depth * m_config.m_static_null_move_margin;
                 if ((stat - score_margin) >= beta) {
-                    return stat - score_margin;
+                    return (stat + beta) / 2;
                 }
             }
 
@@ -853,7 +853,7 @@ namespace engine {
 
             // futility pruning, when static is much worse than alpha, likely not a cut-node, so prune every quiet-move except the pv node
             bool canFutilityPrune = false;
-            if (depth <= 8 && !is_pv_node && alpha < param::checkmate && beta < param::checkmate && !m_pos.has_jumps()) {
+            if (depth <= 8 && !is_pv_node && std::abs(alpha) < param::checkmate && std::abs(beta) < param::checkmate && !m_pos.has_jumps()) {
                 int static_score = evaluate();
                 canFutilityPrune = static_score + depth * 300 <= alpha;
             }
