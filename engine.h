@@ -292,6 +292,9 @@ namespace engine {
 
         timer m_timer;
 
+        std::unordered_map<board::mask, std::tuple<int, move>> m_eval_cache;
+
+
         explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights)
             : computer(pos, tt, timer, std::move(weights), computer_config()) {}
 
@@ -626,18 +629,33 @@ namespace engine {
                 return evaluate();
             }
 
-            int best_score = evaluate();
 
-            if (best_score >= beta) {
+            // cache evaluation and pv move
+            auto hash = m_pos.get_hash();
+            int best_score;
+            move best_move = move::null();
+            // eh fix it?
+            if (m_eval_cache.contains(hash)) {
+                std::tie(best_score, best_move) = m_eval_cache[hash];
+            } else {
+                best_score = evaluate();
+            }
+
+            int remain = m_pos.num_unfinished_piece();
+            int growth_count = m_pos.growth_count();
+            bool can_prune = remain > 2 && growth_count <= 8;
+
+            if (can_prune && best_score >= beta) {
+                m_eval_cache[hash] = {best_score, best_move};
                 return best_score;
             }
-            if (best_score > alpha) {
+            if (can_prune && best_score > alpha) {
                 alpha = best_score;
             }
 
             std::vector<move> moves = m_pos.get_jump_moves();
             auto null = move::null();
-            auto scored_moves = score_moves(moves, null, max_ply, null);
+            auto scored_moves = score_moves(moves, best_move, max_ply, null);
 
             std::vector<move> child_pv_line;
 
@@ -659,6 +677,7 @@ namespace engine {
 
                 if (score > best_score) {
                     best_score = score;
+                    best_move = move;
                 }
 
                 if (score >= beta) {
@@ -675,6 +694,10 @@ namespace engine {
                 }
 
                 child_pv_line.clear();
+            }
+
+            if (!m_eval_cache.contains(hash)) {
+                m_eval_cache[hash] = {best_score, best_move};
             }
 
             return best_score;
