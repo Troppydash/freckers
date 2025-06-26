@@ -39,6 +39,7 @@ class V2(Engine):
         weights = os.path.join(dirname, './binaries/v2/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+
 class V3(Engine):
     def __init__(self):
         super().__init__(load_dll('v3/libfrecker.so'))
@@ -46,6 +47,7 @@ class V3(Engine):
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, './binaries/v3/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
 
 class V31(Engine):
     def __init__(self):
@@ -55,6 +57,7 @@ class V31(Engine):
         weights = os.path.join(dirname, './binaries/v3.1/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+
 class V32(Engine):
     def __init__(self):
         super().__init__(load_dll('v3.2/libfrecker.so'))
@@ -63,6 +66,7 @@ class V32(Engine):
         weights = os.path.join(dirname, './binaries/v3.2/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+
 class V4(Engine):
     def __init__(self):
         super().__init__(load_dll('v4/libfrecker.so'))
@@ -70,6 +74,7 @@ class V4(Engine):
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, './binaries/v4/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
 
 class V5(Engine):
     def __init__(self):
@@ -106,6 +111,7 @@ class V62(Engine):
         weights = os.path.join(dirname, './binaries/v62/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+
 class V7(Engine):
     def __init__(self):
         super().__init__(load_dll('v7/libfrecker.so'))
@@ -113,6 +119,7 @@ class V7(Engine):
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, './binaries/v7/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
 
 class V71(Engine):
     def __init__(self):
@@ -141,8 +148,6 @@ class V73(Engine):
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
 
-
-
 class Latest(Engine):
     def __init__(self):
         super().__init__(load_dll("../../cmake-build-release/libfrecker.so"))
@@ -153,3 +158,4 @@ class Latest(Engine):
 
     def play(self, game: Pos, ts: int, verbose: bool) -> tuple[Move, int]:
         return super().play(game, ts, verbose)
+

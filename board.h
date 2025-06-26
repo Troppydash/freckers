@@ -608,11 +608,11 @@ namespace board {
 
                 all_jumps ^= piece;
                 all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
-//                if (m_turn == board::RED) {
-//                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
-//                } else {
-//                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
-//                }
+                if (m_turn == board::RED) {
+                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
+                } else {
+                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
+                }
                 if (all_jumps > 0) {
                     return true;
                 }
@@ -671,11 +671,11 @@ namespace board {
 
                 all_jumps ^= piece;
                 all_jumps &= ~(bitboard::HLINE << (row * bitboard::COLS));
-//                if (m_turn == board::RED) {
-//                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
-//                } else {
-//                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
-//                }
+                if (m_turn == board::RED) {
+                    all_jumps &= ~(bitboard::HLINE << (std::min(7, row + 2) * bitboard::COLS));
+                } else {
+                    all_jumps &= ~(bitboard::HLINE << (std::max(0, row - 2) * bitboard::COLS));
+                }
                 move::from_mask(all_jumps, piece, moves);
             }
 

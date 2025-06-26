@@ -191,7 +191,7 @@ namespace engine {
             m_lily_scale = 9;
             m_window = 2;
             m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
-            m_window_scale = 4;
+            m_window_scale = 5;
         }
 
 
@@ -284,15 +284,15 @@ namespace engine {
         int m_searched;
 
         int m_history[2][64][64];
-        int m_lmr[50][100];
-        move m_killers[100][2];
+        int m_lmr[param::max_depth][100];
+        move m_killers[param::max_depth][2];
         move m_counter[2][64][64];
         nnue::seq m_nnue;
         computer_config m_config;
 
         timer m_timer;
 
-        std::unordered_map<board::mask, std::tuple<int, move>> m_eval_cache;
+        std::unordered_map<board::mask, std::pair<int, move>> m_eval_cache;
 
 
         explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights)
@@ -322,7 +322,7 @@ namespace engine {
                 }
             }
 
-            for (int depth = 0; depth < 50; ++depth) {
+            for (int depth = 0; depth < param::max_depth; ++depth) {
                 for (int move = 0; move < 100; ++move) {
                     m_lmr[depth][move] = std::max(1, depth / std::max(1, m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
                 }
@@ -634,22 +634,20 @@ namespace engine {
             auto hash = m_pos.get_hash();
             int best_score;
             move best_move = move::null();
-            // eh fix it?
+//            bool hit = false;
             if (m_eval_cache.contains(hash)) {
                 std::tie(best_score, best_move) = m_eval_cache[hash];
+//                hit = true;
             } else {
                 best_score = evaluate();
+                m_eval_cache[hash] = {best_score, best_move};
             }
 
-            int remain = m_pos.num_unfinished_piece();
-            int growth_count = m_pos.growth_count();
-            bool can_prune = remain > 2 && growth_count <= 8;
 
-            if (can_prune && best_score >= beta) {
-                m_eval_cache[hash] = {best_score, best_move};
+            if (best_score >= beta) {
                 return best_score;
             }
-            if (can_prune && best_score > alpha) {
+            if (best_score > alpha) {
                 alpha = best_score;
             }
 
@@ -696,9 +694,7 @@ namespace engine {
                 child_pv_line.clear();
             }
 
-            if (!m_eval_cache.contains(hash)) {
-                m_eval_cache[hash] = {best_score, best_move};
-            }
+            m_eval_cache[hash].second = best_move;
 
             return best_score;
         }
@@ -1233,7 +1229,7 @@ namespace engine {
         }
 
         int thread_value(int score, int worse_score, int depth) const {
-            return (score - worse_score) + 400 * depth;
+            return (score - worse_score) + 500 * depth;
         }
 
 
@@ -1304,6 +1300,7 @@ namespace engine {
                             depths[i]};
                     int threads = m_threads;
                     m_pool.enqueue([context, &finished_tasks, &is_finished, &is_ok, threads, last_score, &config]() {
+                        int last_score_ = last_score;
                         int alpha = context.alpha;
                         int beta = context.beta;
                         int depth = context.depth;
@@ -1328,15 +1325,15 @@ namespace engine {
                             // useless eval if outside the asp window, so why not research
                             if (score <= alpha || score >= beta) {
                                 if (score <= alpha) {
-                                    alpha = last_score + (alpha - last_score) * config.m_window_scale;
-                                    if (alpha < -40 * 100) {
+                                    alpha = last_score_ + (alpha - last_score_) * config.m_window_scale;
+                                    if (alpha < -50 * 100) {
                                         alpha = -param::inf;
                                     }
                                 }
 
                                 if (score >= beta) {
-                                    beta = last_score + (beta - last_score) * config.m_window_scale;
-                                    if (beta > 40 * 100) {
+                                    beta = last_score_ + (beta - last_score_) * config.m_window_scale;
+                                    if (beta > 50 * 100) {
                                         beta = param::inf;
                                     }
                                 }
@@ -1352,6 +1349,9 @@ namespace engine {
                             // early, so retry higher depth
                             depth += 1;
                             is_retry = true;
+                            last_score_ = score;
+                            alpha = last_score_ - config.m_window * 100;
+                            beta = last_score_ + config.m_window * 100;
                         }
 
 
@@ -1388,14 +1388,14 @@ namespace engine {
                     if (score <= alpha || score >= beta) {
                         if (score <= alpha) {
                             alpha = last_score + (alpha - last_score) * config.m_window_scale;
-                            if (alpha < -40 * 100) {
+                            if (alpha < -50 * 100) {
                                 alpha = -param::inf;
                             }
                         }
 
                         if (score >= beta) {
                             beta = last_score + (beta - last_score) * config.m_window_scale;
-                            if (beta > 40 * 100) {
+                            if (beta > 50 * 100) {
                                 beta = param::inf;
                             }
                         }
