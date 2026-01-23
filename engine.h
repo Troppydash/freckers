@@ -490,7 +490,7 @@ namespace engine {
         void incr_counter(const move &prev_move, move &move) {
             if (prev_move.is_storable() && move.is_slient()) {
                 auto coord = prev_move.get_coords();
-                m_counter[0][coord.first][coord.second] = move;
+                m_counter[m_pos.m_turn][coord.first][coord.second] = move;
             }
         }
 
