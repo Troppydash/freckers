@@ -53,10 +53,10 @@ namespace engine {
                         adj_score = score;
                         should_use = true;
                     } else if (m_flag == param::alpha_flag && score <= alpha) {
-                        adj_score = alpha;
+                        adj_score = score;
                         should_use = true;
                     } else if (m_flag == param::beta_flag && score >= beta) {
-                        adj_score = beta;
+                        adj_score = score;
                         should_use = true;
                     }
                 }
@@ -98,7 +98,22 @@ namespace engine {
 
         entry &probe(board::hash hash) {
             board::hash index = hash % m_size;
-            return m_entries[index];
+
+            auto &first = m_entries[index];
+            if (first.m_hash == hash)
+                return first;
+
+            return m_entries[(index + 1) % m_size];
+        }
+
+        entry &store(board::hash hash, int depth) {
+            board::hash index = hash % m_size;
+
+            auto &first = m_entries[index];
+            if (first.m_depth <= depth)
+                return first;
+
+            return m_entries[(index + 1) % m_size];
         }
 
         double occupied() {
@@ -482,9 +497,7 @@ namespace engine {
                 }
             }
 
-            if (best_index != i) {
-                swap(scored_moves[i], scored_moves[best_index]);
-            }
+            swap(scored_moves[i], scored_moves[best_index]);
         }
 
         void incr_counter(const move &prev_move, move &move) {
@@ -501,7 +514,7 @@ namespace engine {
 
             auto coord = move.get_coords();
             m_history[m_pos.m_turn][coord.first][coord.second] += depth * depth;
-            if (m_history[m_pos.m_turn][coord.first][coord.second] > param::base_score) {
+            if (m_history[m_pos.m_turn][coord.first][coord.second] >= param::base_score) {
                 for (auto &i: m_history) {
                     for (auto &j: i) {
                         for (int &k: j) {
@@ -512,15 +525,12 @@ namespace engine {
             }
         }
 
-        void decr_history(move &move) {
-            if (!move.is_slient())
-                return;
-
+        void decr_history(move &move, int depth) {
             auto coord = move.get_coords();
-
-            if (m_history[m_pos.m_turn][coord.first][coord.second] > 0) {
-                m_history[m_pos.m_turn][coord.first][coord.second] -= 1;
-            }
+            auto &score = m_history[m_pos.m_turn][coord.first][coord.second];
+            score -= depth * depth;
+            if (score < 0)
+                score = 0;
         }
 
         void store_killer(int ply, const move &killer) {
@@ -605,7 +615,7 @@ namespace engine {
             }
         }
 
-        int qsearch(int max_ply, int ply, int alpha, int beta, std::vector<move> &pv_line) {
+        int qsearch(int max_ply, int ply, int alpha, int beta) {
             m_searched += 1;
 
             if (m_searched % 2048 == 0) {
@@ -634,10 +644,10 @@ namespace engine {
             auto hash = m_pos.get_hash();
             int best_score;
             move best_move = move::null();
-//            bool hit = false;
+            //            bool hit = false;
             if (m_eval_cache.contains(hash)) {
                 std::tie(best_score, best_move) = m_eval_cache[hash];
-//                hit = true;
+                //                hit = true;
             } else {
                 best_score = evaluate();
                 m_eval_cache[hash] = {best_score, best_move};
@@ -654,9 +664,6 @@ namespace engine {
             std::vector<move> moves = m_pos.get_jump_moves();
             auto null = move::null();
             auto scored_moves = score_moves(moves, best_move, max_ply, null);
-
-            std::vector<move> child_pv_line;
-
             for (int i = 0; i < moves.size(); ++i) {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
@@ -664,7 +671,7 @@ namespace engine {
                 push_nnue(move);
                 m_pos.push(move);
 
-                int score = -qsearch(max_ply, ply + 1, -beta, -alpha, child_pv_line);
+                int score = -qsearch(max_ply, ply + 1, -beta, -alpha);
 
                 m_pos.pop(move);
                 pop_nnue(move);
@@ -684,14 +691,7 @@ namespace engine {
 
                 if (score > alpha) {
                     alpha = score;
-                    pv_line.clear();
-                    pv_line.push_back(move);
-                    for (auto m: child_pv_line) {
-                        pv_line.push_back(m);
-                    }
                 }
-
-                child_pv_line.clear();
             }
 
             m_eval_cache[hash].second = best_move;
@@ -802,7 +802,8 @@ namespace engine {
 
 
             if (depth <= 0) {
-                return qsearch(ply, 0, alpha, beta, pv_line);
+                m_searched -= 1;
+                return qsearch(ply, 0, alpha, beta);
             }
 
             auto &entry = m_tt.probe(m_pos.get_hash());
@@ -862,8 +863,7 @@ namespace engine {
             if (depth <= 4 && !is_pv_node && !m_pos.has_jumps()) {
                 int static_score = evaluate();
                 if (static_score + depth * 400 < alpha) {
-                    std::vector<move> line;
-                    int score = qsearch(ply, 0, alpha, beta, line);
+                    int score = qsearch(ply, 0, alpha, beta);
                     if (score < alpha) {
                         return alpha;
                     }
@@ -909,12 +909,17 @@ namespace engine {
             int best_score = -param::inf;
             move best_move = move::null();
             int tt_flag = param::alpha_flag;
+            move quiet_moves[64];
+            int quiet_moves_count = 0;
 
             for (int i = 0; i < moves.size(); ++i) {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
                 int explored_moves = i + 1;
+
+                // ignore tt move if skipped
+                if (!tt_move.is_null() && explored_moves > 1 && tt_move == move) continue;
 
                 push_nnue(move);
                 m_pos.push(move);
@@ -976,11 +981,18 @@ namespace engine {
                 if (score >= beta) {
                     tt_flag = param::beta_flag;
                     incr_history(move, depth);
+                    if (move.is_slient()) {
+                        for (int j = 0; j < quiet_moves_count; ++j)
+                            decr_history(quiet_moves[j], depth);
+                    }
+
                     incr_counter(prev_move, move);
                     store_killer(ply, move);
                     break;
-                } else {
-                    //                    decr_history(move);
+                }
+
+                if (move.is_slient() && quiet_moves_count < 64) {
+                    quiet_moves[quiet_moves_count++] = move;
                 }
 
                 if (score > alpha) {
@@ -991,9 +1003,6 @@ namespace engine {
                     for (auto m: child_pv_line) {
                         pv_line.push_back(m);
                     }
-                    //                    incr_history(move, depth);
-                } else {
-                    //                    decr_history(move);
                 }
 
                 child_pv_line.clear();
@@ -1002,13 +1011,11 @@ namespace engine {
                 if (explored_moves == 1 && !tt_move.is_null()) {
                     moves = m_pos.get_moves();
                     scored_moves = score_moves(moves, tt_move, ply, prev_move);
-
-                    // ignore tt move, since this will always get the tt move first
-                    sort_scored_moves(scored_moves, 0);
                 }
             }
 
-            if (depth > entry.m_depth && !m_timer.is_stopped()) {
+            if (!m_timer.is_stopped()) {
+                entry = m_tt.store(m_pos.get_hash(), depth);
                 entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
 
@@ -1208,7 +1215,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(), m_tt(1024) {
+            : m_threads(threads), m_pool(), m_tt(2048) {
         }
 
 
