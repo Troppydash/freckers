@@ -1,0 +1,3 @@
+em++ ./main.cpp -o ./wasm/main.html -sSTACK_SIZE=2048000 -sALLOW_MEMORY_GROWTH -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sEXPORTED_FUNCTIONS=_make_instance,_free_instance,_pos_default,_pos_state,_pos_lily,_pos_red,_pos_blue,_pos_moves,_pos_turn,_pos_compute_moves,_pos_moves_length,_pos_moves_start,_pos_moves_end,_pos_moves_grow,_pos_push,_pos_pop,_play,_play_board,_get_last_score,_set_weights,_start_ponder,_ponder_once,_ponder_depth,_ponder_grow,_ponder_start,_ponder_end --embed-file weights -O3 -mavx -msimd128
+cp ./wasm/main.js ./wasm/js/main.js
+cp ./wasm/main.wasm ./wasm/js/main.wasm

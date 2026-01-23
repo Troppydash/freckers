@@ -6,16 +6,20 @@
 #define FRECKER_BOARD_H
 
 #include "colors.h"
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
 #include <random>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
+#include <iostream>
 
 namespace board {
     using mask = uint64_t;
+    using hash = unsigned __int128;
 
     const int RED = 0;
     const int BLUE = 1;
@@ -188,9 +192,25 @@ namespace board {
         mask m_start;
         mask m_end;
 
+        explicit move() {
+            m_grow = bitboard::ALL - 1;
+            m_start = 0;
+            m_end = 0;
+        }
+
+        explicit move(mask grow, mask start, mask end)
+            : m_grow(grow), m_start(start), m_end(end) {
+        }
+
+        bool operator<(const move &other) const {
+            std::tuple<mask, mask, mask> us{m_grow, m_start, m_end};
+            std::tuple<mask, mask, mask> them{other.m_grow, other.m_start, other.m_end};
+            return us < them;
+        }
+
         // Return an empty move
         static move null() {
-            return {bitboard::ALL - 1, 0, 0};
+            return move{bitboard::ALL - 1, 0, 0};
         }
 
         // Return true if the current move is a grow
@@ -264,24 +284,109 @@ namespace board {
         }
     };
 
+    //    class dynamic_hash {
+    //    public:
+    //        uint64_t m_position_hashes[64][3]{};
+    //        uint64_t m_turn_hash[2]{};
+    //        std::array<uint64_t, 150> m_hash_lists;
+    //        int m_index;
+    //        dynamic_hash() {
+    //            std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+    //            std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+    //            for (int i = 0; i < 64; ++i) {
+    //                for (int k = 0; k < 3; ++k) {
+    //                    m_position_hashes[i][k] = dist(rng);
+    //                }
+    //            }
+    //
+    //            m_turn_hash[0] = dist(rng);
+    //            m_turn_hash[1] = dist(rng);
+    //            m_hash_lists[0] = 0;
+    //            m_index = 0;
+    //        }
+    //
+    //        void init(board::mask red, board::mask blue, board::mask lily) {
+    //            m_index = 0;
+    //            m_hash_lists[m_index] = 0;
+    //
+    //            while (red > 0) {
+    //                int i = __builtin_ctzll(red);
+    //                red ^= (1ull << i);
+    //
+    //                m_hash_lists[m_index] ^= m_position_hashes[i][0];
+    //            }
+    //
+    //            while (blue > 0) {
+    //                int i = __builtin_ctzll(blue);
+    //                blue ^= (1ull << i);
+    //
+    //                m_hash_lists[m_index] ^= m_position_hashes[i][1];
+    //            }
+    //
+    //            while (lily > 0) {
+    //                int i = __builtin_ctzll(lily);
+    //                lily ^= (1ull << i);
+    //
+    //                m_hash_lists[m_index] ^= m_position_hashes[i][2];
+    //            }
+    //        }
+    //
+    //        void push(board::move &move, int turn) {
+    //            if (move.is_null()) {
+    //                return;
+    //            }
+    //
+    //            m_hash_lists[m_index + 1] = m_hash_lists[m_index];
+    //            m_index++;
+    //
+    //            if (move.is_grow()) {
+    //                board::mask m = move.m_grow;
+    //                while (m > 0) {
+    //                    int i = __builtin_ctzll(m);
+    //                    m ^= (1ull << i);
+    //
+    //                    m_hash_lists[m_index] ^= m_position_hashes[i][2];
+    //                }
+    //            } else {
+    //                int from = __builtin_ctzll(move.m_start);
+    //                int to = __builtin_ctzll(move.m_end);
+    //                m_hash_lists[m_index] ^= m_position_hashes[from][turn];
+    //                m_hash_lists[m_index] ^= m_position_hashes[to][turn];
+    //                m_hash_lists[m_index] ^= m_position_hashes[from][2];
+    //            }
+    //        }
+    //
+    //        void pop(board::move &move, int turn) {
+    //            if (move.is_null()) {
+    //                return;
+    //            }
+    //
+    //            m_index--;
+    //        }
+    //
+    //        uint64_t get_hash(int turn) const {
+    //            return m_hash_lists[m_index] ^ m_turn_hash[turn];
+    //        }
+    //    };
+
 
     class dynamic_hash {
     public:
-        uint64_t m_position_hashes[64][3]{};
-        uint64_t m_turn_hash[2]{};
+        hash m_position_hashes[64][3]{};
+        hash m_turn_hash[2]{};
 
-        uint64_t m_hash;
+        hash m_hash;
         dynamic_hash() {
             std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
             std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
             for (int i = 0; i < 64; ++i) {
                 for (int k = 0; k < 3; ++k) {
-                    m_position_hashes[i][k] = dist(rng);
+                    m_position_hashes[i][k] = dist(rng) | (static_cast<hash>(dist(rng)) << 64);
                 }
             }
 
-            m_turn_hash[0] = dist(rng);
-            m_turn_hash[1] = dist(rng);
+            m_turn_hash[0] = dist(rng) | (static_cast<hash>(dist(rng)) << 64);
+            m_turn_hash[1] = dist(rng) | (static_cast<hash>(dist(rng)) << 64);
             m_hash = 0;
         }
 
@@ -335,7 +440,7 @@ namespace board {
             push(move, turn);
         }
 
-        uint64_t get_hash(int turn) const {
+        hash get_hash(int turn) const {
             return m_hash ^ m_turn_hash[turn];
         }
     };
@@ -408,6 +513,8 @@ namespace board {
         // Constructor
         pos(mask mLilypads, mask red, mask blue, int mTurn, int mMoves) : m_lilypads(mLilypads), m_players{red, blue},
                                                                           m_turn(mTurn), m_moves(mMoves) {
+            m_lilypads |= m_players[0];
+            m_lilypads |= m_players[1];
             m_hasher.init(m_players[0], m_players[1], m_lilypads);
         }
 
@@ -586,6 +693,14 @@ namespace board {
                    __builtin_popcountll(m_players[BLUE] & bitboard::TOP);
         }
 
+        int growth_count() {
+            mask player = m_players[m_turn];
+            mask grown = bitboard::dilate(player);
+            grown &= ~m_lilypads;
+            return __builtin_popcountll(grown);
+        }
+
+
         std::vector<move> get_piece_moves(mask piece) const {
             std::vector<move> moves;
 
@@ -625,18 +740,9 @@ namespace board {
             return moves;
         }
 
-        //??
-        std::vector<move> get_moves() const {
-
-            std::vector<move> moves;
-
-            // first handle grow
+        bool has_move() const {
             mask player = m_players[m_turn];
-            mask grown = bitboard::dilate(player);
-            grown &= ~m_lilypads;
-            moves.push_back(move{grown, 0, 0});
 
-            // then handle moves for each piece
             mask pieces = player;
             while (pieces > 0) {
                 // get piece mask
@@ -652,7 +758,45 @@ namespace board {
                 }
                 direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
 
-                move::from_mask(direct, piece, moves);
+                if (direct > 0) {
+                    return true;
+                }
+
+                // jumps
+                mask obst = m_players[0] | m_players[1];
+                mask all_jumps = piece;
+                mask next_jumps = piece;
+
+                // broadcast
+                mask new_jumps = 0;
+                if (m_turn == RED) {
+                    new_jumps = bitboard::jump_down(next_jumps, obst);
+                } else {
+                    new_jumps = bitboard::jump_up(next_jumps, obst);
+                }
+
+                new_jumps &= m_lilypads & (~obst);
+                next_jumps = new_jumps & (~all_jumps);
+                if (next_jumps > 0) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        //??
+        std::vector<move> get_moves() const {
+
+            std::vector<move> moves;
+
+            mask player = m_players[m_turn];
+
+            mask pieces = player;
+            while (pieces > 0) {
+                // get piece mask
+                mask piece = 1ull << __builtin_ctzll(pieces);
+                pieces ^= piece;
 
                 // jumps
                 mask obst = m_players[0] | m_players[1];
@@ -672,11 +816,34 @@ namespace board {
                     all_jumps |= new_jumps;
                 }
 
-
                 all_jumps ^= piece;
                 move::from_mask(all_jumps, piece, moves);
             }
 
+
+            // then handle moves for each piece
+            pieces = player;
+            while (pieces > 0) {
+                // get piece mask
+                mask piece = 1ull << __builtin_ctzll(pieces);
+                pieces ^= piece;
+
+                // direct moves
+                mask direct = 0;
+                if (m_turn == RED) {
+                    direct = bitboard::dilate_down(piece);
+                } else {
+                    direct = bitboard::dilate_up(piece);
+                }
+                direct &= (~(m_players[0] | m_players[1])) & m_lilypads;
+
+                move::from_mask(direct, piece, moves);
+            }
+
+            // first handle grow
+            mask grown = bitboard::dilate(player);
+            grown &= ~m_lilypads;
+            moves.push_back(move{grown, 0, 0});
 
             return moves;
         }
@@ -815,7 +982,7 @@ namespace board {
         }
 
 
-        uint64_t hash() const {
+        hash get_hash() const {
             return m_hasher.get_hash(m_turn);
         }
 

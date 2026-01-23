@@ -4,9 +4,10 @@ import math
 import os
 import pickle
 import random
+from selfplay import Dataset
 
 pk_file = "session6"
-session = "session6"
+session = "session62"
 
 
 def bitmask_to_array(mask: int):
@@ -37,18 +38,14 @@ def generator():
             continue
 
         for i in range(len(dataset.positions)):
-            # 9mllion, requires 80k,
-            prob = 80 / 9000
+            # 9mllion, requires 10k,
+            prob = 50 / 9000
             if not (random.random() < prob):
                 continue
 
             positions = dataset.positions[i]
             outcome = dataset.outcomes[i]
-            lily = bitmask_to_array(positions[0])
-            red = bitmask_to_array(positions[1])
-            blue = list(reversed(bitmask_to_array(positions[2])))
             turn = positions[3]
-            moves = positions[4]
             eval = dataset.evals[i]
 
             xs.append([positions[0], positions[1], positions[2], positions[3]])
@@ -62,18 +59,20 @@ def generator():
 
             # our score is in the perspective of the moving player
 
-            lambda_ = 0.85
-            if eval > 100000:
+            lambda_ = 0.8
+            if eval > 10000:
                 normalized = 1
-            elif eval < -100000:
+            elif eval < -10000:
                 normalized = -1
             else:
                 normalized = 2 / (1 + math.exp(-eval / 1000)) - 1
+
             avg = lambda_ * score + (1 - lambda_) * normalized
             ys.append([avg])
 
+    print(f'loaded {len(ys)} positions')
     # write to file
-    text = []
+    text = [str(len(ys))]
     for x, y in zip(xs, ys):
         text.append(f"{x[0]} {x[1]} {x[2]} {x[3]} {y[0]}")
 

@@ -1,6 +1,8 @@
 import json
+import math
 import random
 import multiprocessing
+import collections
 
 import engine
 import agents
@@ -8,8 +10,43 @@ from engine import Pos, Engine
 import matplotlib.pyplot as plt
 
 
+def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_avg_elo=1000, iters=10000):
+    """
+    Takes a list of names and wins, compute the relative elo scores
+
+    :param names:
+    :param wins:
+    :param target_min_elo:
+    :param iters:
+    :return:
+    """
+    probs = {name: 1.0 for name in names}
+
+    for iter in range(iters):
+        geomean = 1.0
+        for i in names:
+            probs[i] = sum(wins[i, j] * probs[j] / (probs[i] + probs[j]) for j in names if j != i) / sum(
+                wins[j, i] / (probs[i] + probs[j]) for j in names if j != i)
+
+            geomean *= probs[i]
+
+        # divide by geomean
+        if abs(geomean) > 0.001:
+            geomean = geomean ** (1 / len(names))
+            for p in probs:
+                probs[p] /= geomean
+
+    # convert to elo, min set 100 elo
+    elos = {name: math.log(probs[name]) / math.log(10) * 400 for name in names}
+    avg_elo = sum(elos.values()) / len(elos)
+    for elo in elos:
+        elos[elo] += target_avg_elo - avg_elo
+
+    return elos
+
+
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 300
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -60,9 +97,9 @@ def play(x):
     return (i, j, playoff(ai, aj))
 
 
-def round(agents, elos, names):
+def round(agents, elos, wins, names):
     n = len(agents)
-    k = 32
+    # k = 30
 
     with multiprocessing.Pool(6) as p:
         matchups = []
@@ -75,20 +112,42 @@ def round(agents, elos, names):
         results = p.map(play, matchups)
 
     for i, j, scores in results:
-        # update result
-        probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
-        probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
-        elos[names[i]].append(max(400, elos[names[i]][-1] + k * (scores[0] / 2 - probi)))
-        elos[names[j]].append(max(400, elos[names[j]][-1] + k * (scores[1] / 2 - probj)))
+        # update result, divide scores by 2
+        print(f"{names[i]} vs {names[j]}: {scores}")
+
+        normalized = scores[0] / (scores[0] + scores[1])
+        wins[names[i], names[j]] += normalized
+        wins[names[j], names[i]] += (1 - normalized)
+
+    new_elos = bradley_terry(names, wins)
+    for name in names:
+        elos[name].append(new_elos[name])
+
+        # probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
+        # probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
+        # elos[names[i]].append(max(400, elos[names[i]][-1] + k * (scores[0] / 2 - probi)))
+        # elos[names[j]].append(max(400, elos[names[j]][-1] + k * (scores[1] / 2 - probj)))
+
+
+def save_wins(wins):
+    import pickle
+    with open('bradley_terry_wins.pk', 'wb') as f:
+        pickle.dump(wins, f)
+
+
+def load_wins():
+    import pickle
+    with open('bradley_terry_wins.pk', 'rb') as f:
+        return pickle.load(f)
 
 
 def save_elos(elos):
-    with open('elo.json', 'w') as f:
+    with open('bradley_terry_elo.json', 'w') as f:
         json.dump(elos, f)
 
 
 def load_elos(agents):
-    with open('elo.json', 'r') as f:
+    with open('bradley_terry_elo.json', 'r') as f:
         elos = json.load(f)
 
     best = 1
@@ -108,28 +167,55 @@ def plot_elos(elos):
     for key, value in elos.items():
         ax.plot(list(range(len(value))), value, label=key)
 
-    ax.set_xlim([len(elos[key]) - 150, len(elos[key])])
-    fig.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.set_xlim([len(elos[key]) - 30, len(elos[key])])
+    fig.legend(bbox_to_anchor=(0.9, 0.9), loc="upper left")
     ax.grid()
-    fig.savefig("elos.png", bbox_inches="tight")
+    plt.xlabel('iteration')
+    plt.ylabel('elo')
+    fig.savefig("bradley_terry_elo.png", bbox_inches="tight")
+
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    # agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V6, agents.Latest]
-    # names = ["v0", "v1", "v2", "v32", "v4", "v5", "v6", "latest"]
+    # A, B, C, D = 'A', 'B', 'C', 'D'
+    # wins = {
+    #     (A, B): 2,
+    #     (A, C): 0,
+    #     (A, D): 1,
+    #     (B, A): 3,
+    #     (B, C): 5,
+    #     (B, D): 0,
+    #     (C, A): 0,
+    #     (C, B): 3,
+    #     (C, D): 1,
+    #     (D, A): 4,
+    #     (D, B): 0,
+    #     (D, C): 3,
+    # }
+    # print(bradley_terry([A, B, C, D], wins, 100))
 
-    agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V6, agents.V62, agents.Latest]
-    names = ["v0", "v1", "v2", "v3.2", "v4", "v5", "v6", "v6.2", "latest"]
+    agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V73,
+              agents.Latest]
+    names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
+
     assert len(agents) == len(names)
     elos = load_elos(names)
-    plot_elos(elos)
+    # plot_elos(elos)
+
+    wins = {(a, b): 0.1 for a in names for b in names}
+    try:
+        wins = load_wins()
+        print('loaded wins')
+    except:
+        pass
 
     i = 0
     while True:
         print(f"[info] round {i}")
-        round(agents, elos, names)
+        round(agents, elos, wins, names)
         save_elos(elos)
+        save_wins(wins)
         plot_elos(elos)
 
         i += 1
