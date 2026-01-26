@@ -58,6 +58,7 @@ def make_inputs(position: tuple[int, int, int, int, int]):
     else:
         return out_blue + out_red
 
+
 def average_row(red, blue):
     # median row
     rows = 0
@@ -71,7 +72,8 @@ def average_row(red, blue):
             if blue[row * 8 + col]:
                 rows += 7 - row
 
-    return rows // (2*6*2)
+    return rows // (2 * 6 * 2)
+
 
 def display_board(mask):
     for row in range(8):
@@ -81,6 +83,7 @@ def display_board(mask):
             else:
                 print("_", end='')
         print()
+
 
 class FreckersDataset(Dataset):
     def __init__(self):
@@ -100,14 +103,12 @@ class FreckersDataset(Dataset):
 
             print(f'[dataset] loading {os.path.basename(file)}')
 
-
             try:
                 with open(file, 'rb') as f:
                     dataset = pickle.load(f)
             except Exception as e:
                 print(f'skipping: {e}')
                 continue
-
 
             pct = 0
             for i in range(len(dataset.positions)):
@@ -168,10 +169,8 @@ class FreckersDataset(Dataset):
                 assert -1 <= avg <= 1
                 y.append([avg])
 
-
             print(f"skipped {pct / len(dataset.positions) * 100:.2f}%")
             # break
-
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, input_size)
         self.y = torch.tensor(y, dtype=torch.float32)
@@ -187,7 +186,7 @@ class FreckersDataset(Dataset):
 class FreckersNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(8 * 8 * 2, 64+4, dtype=torch.float32)
+        self.layer1 = nn.Linear(8 * 8 * 2, 64 + 4, dtype=torch.float32)
         self.layer2 = nn.Linear(64 * 2, 32, dtype=torch.float32)
         self.layer3 = nn.Linear(32, 16, dtype=torch.float32)
         self.layer4 = nn.Linear(16, 1, dtype=torch.float32)
@@ -213,8 +212,10 @@ class FreckersNeuralNetwork(nn.Module):
 
         return x + pst
 
+
 def custom_loss(pred, y):
-    return torch.mean(torch.pow(torch.abs(pred-y), 2.6))
+    return torch.mean(torch.pow(torch.abs(pred - y), 2.6))
+
 
 def train(config):
     net = FreckersNeuralNetwork().to(device)

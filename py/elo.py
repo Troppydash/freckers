@@ -10,7 +10,7 @@ from engine import Pos, Engine
 import matplotlib.pyplot as plt
 
 
-folder = 'elos/bt1'
+folder = 'elos/bt2'
 
 def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_avg_elo=1000, iters=10000):
     """
@@ -48,7 +48,7 @@ def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_a
 
 
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 300
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -180,9 +180,13 @@ def plot_elos(elos):
 
 
 if __name__ == '__main__':
-    agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V73,
+    # agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V73,
+    #           agents.Latest]
+    # names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
+
+    agents = [agents.V62, agents.V73, agents.V74,
               agents.Latest]
-    names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
+    names = ["v6", "v73", "v74", "latest"]
 
     assert len(agents) == len(names)
     elos = load_elos(names)

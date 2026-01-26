@@ -6,21 +6,22 @@ set(CMAKE_CXX_STANDARD 20)
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 if (COMPILER_SUPPORTS_MARCH_NATIVE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -Wall")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -Wall -fopt-info-vec-optimized=vec.log")
+    # -ftrapv
 endif ()
 
 add_library(frecker SHARED main.cpp)
 
 # https://gist.github.com/jlgerber/eafc4ee2b9954e27dd2bb009496b1b03
-#add_executable(frecker main.cpp
-#        board.h
-#        param.h
-#        engine.h
-#        colors.h
-#        nnue.h
-#        endgame.h
-#        aligned.h
-#)
+add_executable(frecker_app main.cpp
+        board.h
+        param.h
+        engine.h
+        colors.h
+        nnue.h
+        endgame.h
+        aligned.h
+)
 
 
 

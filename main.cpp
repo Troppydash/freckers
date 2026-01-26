@@ -10,7 +10,8 @@
 #include <thread>
 
 std::vector<std::string> get_weights(const std::string &base) {
-    return {base + "./weights/weight_1.txt", base + "./weights/weight_2.txt", base + "./weights/weight_3.txt", base + "./weights/weight_4.txt"};
+    return {base + "./weights/nnue.bin"};
+    // return {base + "./weights/weight_1.txt", base + "./weights/weight_2.txt", base + "./weights/weight_3.txt", base + "./weights/weight_4.txt"};
 }
 
 std::vector<std::string> get_weights_direct(const std::string &base) {
@@ -455,12 +456,36 @@ void test_a_star_position() {
 
 
 int main() {
-    //    texel_tune();
-    //    return 0;
+    // texel_tune();
+    // return 0;
     //    test_position();
     //    return 0;
 
+    // board::pos p;
+
+    // int value = eval.evaluate(p);
+    // std::cout << value;
+    //
+    // return 0;
     board::pos pos;
+    //
+    //
+    // engine::nnue_evaluator eval;
+    // eval.load_nnue("../weights/nnue.bin");
+    // eval.initialize(pos);
+    //
+    // // auto p = pos.get_moves()[5];
+    // auto p = board::move::null();
+    // eval.push_move(pos, p);
+    // pos.push(p);
+    //
+    // // auto p2 = pos.get_moves()[0];
+    // // pos.push(p2);
+    // // pos.pop(p2);
+    // // pos.pop(p);
+    // // eval.pop_move(pos, p);
+    //
+    // std::cout << eval.evaluate(pos);
 
     while (pos.get_state() == board::NONE) {
         if (pos.m_turn == board::RED) {
@@ -474,16 +499,14 @@ int main() {
         if (pos.m_turn == board::RED) {
             printf("start\n");
             engine::lazysmp lazy(1);
-            auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
-            //            engine::computer engine{pos, get_weights("../")};
-            //            auto move = engine.search(2000, nullptr, true);
+            auto move = lazy.search(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
 
         } else {
             printf("start\n");
             engine::lazysmp lazy(1);
-            auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
+            auto move = lazy.search(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
         }

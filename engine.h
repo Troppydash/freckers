@@ -7,6 +7,7 @@
 
 #include "board.h"
 #include "nnue.h"
+#include "nnue2.h"
 #include "param.h"
 #include "threadpool.h"
 #include <algorithm>
@@ -196,7 +197,7 @@ namespace engine {
 
 
         computer_config() {
-            m_lmp_margins = {0, 4, 10, 14, 16, 20};
+            m_lmp_margins = {0, 6, 10, 14, 16, 20};
             m_lmr_depth = 3;
             m_lmr_move = 7;
             m_tempo = 55;
@@ -204,9 +205,21 @@ namespace engine {
             m_countermove = 7;
             m_lily_min = 3;
             m_lily_scale = 9;
-            m_window = 2;
+            m_window = 5;
             m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
             m_window_scale = 5;
+
+            // m_lmp_margins = {0, 8, 12, 18, 22, 24};
+            // m_lmr_depth = 4;
+            // m_lmr_move = 12;
+            // m_tempo = 20;
+            // m_static_null_move_margin = 400;
+            // m_countermove = 15;
+            // m_lily_min = 3;
+            // m_lily_scale = 9;
+            // m_window = 5;
+            // m_fut_margins = {0, 200, 220, 240, 280, 340, 400, 460, 520};
+            // m_window_scale = 10;
         }
 
 
@@ -292,6 +305,86 @@ namespace engine {
         }
     };
 
+    struct nnue_evaluator {
+        nnue2 m_nnue{};
+
+        void load_nnue(const std::string &path) {
+            m_nnue.load_network(path);
+        }
+
+        void push_move(const board::pos &position, const board::move &move) {
+            if (move.is_grow()) {
+                mask m = move.m_grow;
+                while (m > 0) {
+                    int index = __builtin_ctzll(m);
+                    mask piece = 1ull << index;
+                    m ^= piece;
+
+                    m_nnue.add_feature(RED, 64 + index);
+                    m_nnue.add_feature(BLUE, 64 + (index ^ 56));
+                }
+            } else if (position.m_turn == board::RED) {
+                int start = __builtin_ctzll(move.m_start);
+                int end = __builtin_ctzll(move.m_end);
+
+                // add piece
+                m_nnue.move_feature(RED, start, end);
+
+                // remove lilypad
+                m_nnue.remove_feature(RED, 64 + start);
+                m_nnue.remove_feature(BLUE, 64 + (start ^ 56));
+            } else {
+                int start = __builtin_ctzll(move.m_start);
+                int end = __builtin_ctzll(move.m_end);
+
+                // add piece
+                m_nnue.move_feature(BLUE, start ^ 56, end ^ 56);
+
+                // remove lilypad
+                m_nnue.remove_feature(RED, 64 + start);
+                m_nnue.remove_feature(BLUE, 64 + (start ^ 56));
+            }
+        }
+
+        void pop_move(const board::pos &position, const board::move &move) {
+            if (move.is_grow()) {
+                mask m = move.m_grow;
+                while (m > 0) {
+                    int index = __builtin_ctzll(m);
+                    mask piece = 1ull << index;
+                    m ^= piece;
+
+                    m_nnue.remove_feature(RED, 64 + index);
+                    m_nnue.remove_feature(BLUE, 64 + (index ^ 56));
+                }
+            } else if (position.m_turn == board::RED) {
+                int start = __builtin_ctzll(move.m_start);
+                int end = __builtin_ctzll(move.m_end);
+
+                m_nnue.move_feature(RED, end, start);
+
+                m_nnue.add_feature(RED, 64 + start);
+                m_nnue.add_feature(BLUE, 64 + (start ^ 56));
+            } else {
+                int start = __builtin_ctzll(move.m_start);
+                int end = __builtin_ctzll(move.m_end);
+
+                m_nnue.move_feature(BLUE, end ^ 56, start ^ 56);
+
+                m_nnue.add_feature(RED, 64 + start);
+                m_nnue.add_feature(BLUE, 64 + (start ^ 56));
+            }
+        }
+
+        int32_t evaluate(const board::pos &position) const {
+            return m_nnue.evaluate(position.m_turn);
+        }
+
+        void initialize(const board::pos &position) {
+            m_nnue.initialize(position);
+        }
+    };
+
     class computer {
     public:
         table &m_tt;
@@ -302,12 +395,20 @@ namespace engine {
         int m_lmr[param::max_depth][100];
         move m_killers[param::max_depth][2];
         move m_counter[2][64][64];
-        nnue::seq m_nnue;
+
+        // unused
+        // nnue::seq m_nnue;
+        nnue_evaluator m_nnue_evaluator;
+        struct eval_cache {
+            int score;
+            uint64_t hash;
+        };
+        constexpr static size_t EVAL_CACHE_SIZE = 64 * 1024 * 1024 / sizeof(eval_cache);
+        std::vector<eval_cache> m_eval_cache{EVAL_CACHE_SIZE};
+
         computer_config m_config;
 
         timer m_timer;
-
-        std::unordered_map<board::mask, std::pair<int, move>> m_eval_cache;
 
 
         explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights)
@@ -315,7 +416,11 @@ namespace engine {
 
 
         explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights, computer_config config)
-            : m_tt(tt), m_pos(pos), m_searched(0), m_nnue(weights), m_config(config), m_timer(timer) {
+            : m_tt(tt), m_pos(pos), m_searched(0), m_config(config), m_timer(timer) {
+
+            m_nnue_evaluator.load_nnue(weights[0]);
+
+
             for (auto &i: m_history) {
                 for (auto &j: i) {
                     for (int &k: j) {
@@ -360,13 +465,12 @@ namespace engine {
                 row += 7 - i / 8;
             }
 
-            return row / (2 * 6 * 2);
+            return row / (2 * 6);
         }
 
 
         int nnue_evaluate() {
-            int idx = median_piece(m_pos.m_players[board::RED], m_pos.m_players[board::BLUE]);
-            return m_nnue.compute(m_pos.m_turn == board::BLUE, idx);
+            return m_nnue_evaluator.evaluate(m_pos);
         }
 
         int classical_evaluate() {
@@ -406,17 +510,30 @@ namespace engine {
         }
 
         int evaluate() {
-            return nnue_evaluate() + m_config.m_tempo;
+            uint64_t hash = m_pos.get_hash();
+            if (m_eval_cache[hash % EVAL_CACHE_SIZE].hash == hash)
+                return m_eval_cache[hash % EVAL_CACHE_SIZE].score;
+
+            int eval = nnue_evaluate();
+            if (std::abs(eval) <= 4 * 100)
+                eval += m_config.m_tempo;
+
+            m_eval_cache[hash % EVAL_CACHE_SIZE].score = eval;
+            m_eval_cache[hash % EVAL_CACHE_SIZE].hash = hash;
+
+            return eval;
         }
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply, const move &prev_move) {
             std::vector<std::pair<int, int>> scores;
+            // int stage = median_piece(m_pos.m_players[0], m_pos.m_players[1]);
             for (int i = 0; i < moves.size(); ++i) {
                 int score = 0;
                 move &move = moves[i];
 
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
+                    // } else if (move.is_jump() && stage <= 5) {
                 } else if (move.is_jump()) {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
@@ -455,7 +572,7 @@ namespace engine {
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
-                            if (move == m_counter[0][coord.first][coord.second]) {
+                            if (move == m_counter[m_pos.m_turn][coord.first][coord.second]) {
                                 score += m_config.m_countermove;
                             }
                         }
@@ -542,78 +659,79 @@ namespace engine {
             }
         }
 
-        void push_nnue(move &move) {
-            if (move.is_null()) {
-                return;
-            }
+        // void push_nnue(move &move) {
+        //     if (move.is_null()) {
+        //         return;
+        //     }
+        //
+        //     if (move.is_grow()) {
+        //         board::mask m = move.m_grow;
+        //         while (m > 0) {
+        //             int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+        //             mask piece = 1ull << index;
+        //             m ^= piece;
+        //
+        //             m_nnue.push_red(index);
+        //             m_nnue.push_blue(63 - index);
+        //         }
+        //     } else if (m_pos.m_turn == board::RED) {
+        //         int i = __builtin_ctzll(move.m_start);
+        //         int j = __builtin_ctzll(move.m_end);
+        //
+        //         m_nnue.push_red(64 + j);
+        //         m_nnue.pop_red(64 + i);
+        //
+        //         m_nnue.pop_red(i);
+        //         m_nnue.pop_blue(63 - i);
+        //     } else {
+        //         int i = __builtin_ctzll(move.m_start);
+        //         int j = __builtin_ctzll(move.m_end);
+        //
+        //         m_nnue.push_blue(64 + 63 - j);
+        //         m_nnue.pop_blue(64 + 63 - i);
+        //
+        //         m_nnue.pop_red(i);
+        //         m_nnue.pop_blue(63 - i);
+        //     }
+        // }
+        //
+        // void pop_nnue(move &move) {
+        //     if (move.is_null()) {
+        //         return;
+        //     }
+        //
+        //     if (move.is_grow()) {
+        //
+        //         board::mask m = move.m_grow;
+        //         while (m > 0) {
+        //             int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
+        //             mask piece = 1ull << index;
+        //             m ^= piece;
+        //
+        //             m_nnue.pop_red(index);
+        //             m_nnue.pop_blue(63 - index);
+        //         }
+        //     } else if (m_pos.m_turn == board::RED) {
+        //         int i = __builtin_ctzll(move.m_start);
+        //         int j = __builtin_ctzll(move.m_end);
+        //
+        //         m_nnue.pop_red(64 + j);
+        //         m_nnue.push_red(64 + i);
+        //
+        //         m_nnue.push_red(i);
+        //         m_nnue.push_blue(63 - i);
+        //     } else {
+        //         int i = __builtin_ctzll(move.m_start);
+        //         int j = __builtin_ctzll(move.m_end);
+        //
+        //         m_nnue.pop_blue(64 + 63 - j);
+        //         m_nnue.push_blue(64 + 63 - i);
+        //
+        //         m_nnue.push_red(i);
+        //         m_nnue.push_blue(63 - i);
+        //     }
+        // }
 
-            if (move.is_grow()) {
-                board::mask m = move.m_grow;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
-
-                    m_nnue.push_red(index);
-                    m_nnue.push_blue(63 - index);
-                }
-            } else if (m_pos.m_turn == board::RED) {
-                int i = __builtin_ctzll(move.m_start);
-                int j = __builtin_ctzll(move.m_end);
-
-                m_nnue.push_red(64 + j);
-                m_nnue.pop_red(64 + i);
-
-                m_nnue.pop_red(i);
-                m_nnue.pop_blue(63 - i);
-            } else {
-                int i = __builtin_ctzll(move.m_start);
-                int j = __builtin_ctzll(move.m_end);
-
-                m_nnue.push_blue(64 + 63 - j);
-                m_nnue.pop_blue(64 + 63 - i);
-
-                m_nnue.pop_red(i);
-                m_nnue.pop_blue(63 - i);
-            }
-        }
-
-        void pop_nnue(move &move) {
-            if (move.is_null()) {
-                return;
-            }
-
-            if (move.is_grow()) {
-
-                board::mask m = move.m_grow;
-                while (m > 0) {
-                    int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-                    mask piece = 1ull << index;
-                    m ^= piece;
-
-                    m_nnue.pop_red(index);
-                    m_nnue.pop_blue(63 - index);
-                }
-            } else if (m_pos.m_turn == board::RED) {
-                int i = __builtin_ctzll(move.m_start);
-                int j = __builtin_ctzll(move.m_end);
-
-                m_nnue.pop_red(64 + j);
-                m_nnue.push_red(64 + i);
-
-                m_nnue.push_red(i);
-                m_nnue.push_blue(63 - i);
-            } else {
-                int i = __builtin_ctzll(move.m_start);
-                int j = __builtin_ctzll(move.m_end);
-
-                m_nnue.pop_blue(64 + 63 - j);
-                m_nnue.push_blue(64 + 63 - i);
-
-                m_nnue.push_red(i);
-                m_nnue.push_blue(63 - i);
-            }
-        }
 
         int qsearch(int max_ply, int ply, int alpha, int beta) {
             m_searched += 1;
@@ -641,18 +759,8 @@ namespace engine {
 
 
             // cache evaluation and pv move
-            auto hash = m_pos.get_hash();
-            int best_score;
-            move best_move = move::null();
-            //            bool hit = false;
-            if (m_eval_cache.contains(hash)) {
-                std::tie(best_score, best_move) = m_eval_cache[hash];
-                //                hit = true;
-            } else {
-                best_score = evaluate();
-                m_eval_cache[hash] = {best_score, best_move};
-            }
-
+            // move best_move = move::null();
+            int best_score = evaluate();
 
             if (best_score >= beta) {
                 return best_score;
@@ -663,18 +771,18 @@ namespace engine {
 
             std::vector<move> moves = m_pos.get_jump_moves();
             auto null = move::null();
-            auto scored_moves = score_moves(moves, best_move, max_ply, null);
+            auto scored_moves = score_moves(moves, null, max_ply, null);
             for (int i = 0; i < moves.size(); ++i) {
                 sort_scored_moves(scored_moves, i);
                 move &move = moves[scored_moves[i].second];
 
-                push_nnue(move);
+                m_nnue_evaluator.push_move(m_pos, move);
                 m_pos.push(move);
 
                 int score = -qsearch(max_ply, ply + 1, -beta, -alpha);
 
                 m_pos.pop(move);
-                pop_nnue(move);
+                m_nnue_evaluator.pop_move(m_pos, move);
 
                 if (m_timer.is_stopped()) {
                     return 0;
@@ -682,7 +790,7 @@ namespace engine {
 
                 if (score > best_score) {
                     best_score = score;
-                    best_move = move;
+                    // best_move = move;
                 }
 
                 if (score >= beta) {
@@ -693,8 +801,6 @@ namespace engine {
                     alpha = score;
                 }
             }
-
-            m_eval_cache[hash].second = best_move;
 
             return best_score;
         }
@@ -918,10 +1024,7 @@ namespace engine {
 
                 int explored_moves = i + 1;
 
-                // ignore tt move if skipped
-                if (!tt_move.is_null() && explored_moves > 1 && tt_move == move) continue;
-
-                push_nnue(move);
+                m_nnue_evaluator.push_move(m_pos, move);
                 m_pos.push(move);
 
                 // lmp
@@ -929,7 +1032,7 @@ namespace engine {
                     bool tactical = m_pos.has_jumps();
                     if (!tactical) {
                         m_pos.pop(move);
-                        pop_nnue(move);
+                        m_nnue_evaluator.pop_move(m_pos, move);
                         continue;
                     }
                 }
@@ -938,7 +1041,7 @@ namespace engine {
                     bool tactical = m_pos.has_jumps();
                     if (!tactical) {
                         m_pos.pop(move);
-                        pop_nnue(move);
+                        m_nnue_evaluator.pop_move(m_pos, move);
                         continue;
                     }
                 }
@@ -949,7 +1052,7 @@ namespace engine {
                     score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
                 } else {
                     int reduction = 0;
-                    if (!is_pv_node && explored_moves >= 3 && depth >= 3) {
+                    if (!is_pv_node && explored_moves >= 3 && depth >= 3 && !move.is_jump()) {
                         reduction = m_lmr[depth][explored_moves];
                     }
 
@@ -967,7 +1070,7 @@ namespace engine {
                     }
                 }
                 m_pos.pop(move);
-                pop_nnue(move);
+                m_nnue_evaluator.pop_move(m_pos, move);
 
                 if (m_timer.is_stopped()) {
                     return 0;
@@ -1011,6 +1114,7 @@ namespace engine {
                 if (explored_moves == 1 && !tt_move.is_null()) {
                     moves = m_pos.get_moves();
                     scored_moves = score_moves(moves, tt_move, ply, prev_move);
+                    sort_scored_moves(scored_moves, 0);
                 }
             }
 
@@ -1092,8 +1196,9 @@ namespace engine {
 
         void init() {
             m_searched = 0;
-            auto [red, blue] = init_nnue();
-            m_nnue.init(red, blue);
+            m_nnue_evaluator.initialize(m_pos);
+            // auto [red, blue] = init_nnue();
+            // m_nnue.init(red, blue);
         }
 
         //        move search(int ts, int *new_score, bool verbose, int max_depth = param::max_depth) {
@@ -1215,7 +1320,7 @@ namespace engine {
 
         explicit lazysmp(int threads)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(), m_tt(2048) {
+            : m_threads(threads), m_pool(threads), m_tt(2048) {
         }
 
 
@@ -1301,7 +1406,7 @@ namespace engine {
                             computers[i],
                             alpha,
                             beta,
-                            depth + (1 - i % 2),
+                            depth + (i % 2),
                             best_moves[i],
                             scores[i],
                             depths[i]};
@@ -1377,7 +1482,7 @@ namespace engine {
                             computers[root_thread],
                             alpha,
                             beta,
-                            depth + (1 - root_thread % 2),
+                            depth + (root_thread % 2),
                             best_moves[root_thread],
                             scores[root_thread],
                             depths[root_thread]};
@@ -1417,7 +1522,6 @@ namespace engine {
                     break;
                 }
 
-
                 // when root search stopped,
                 // stop the other engines
                 for (int i = 0; i < m_threads; ++i) {
@@ -1425,7 +1529,8 @@ namespace engine {
                 }
 
                 // wait until threads finished
-                is_finished.wait(false);
+                if (m_threads > 1)
+                    is_finished.wait(false);
 
                 // check if timer exceeds
                 m_timer.check();
@@ -1536,7 +1641,8 @@ namespace engine {
             : m_computer(std::move(computer)) {
 
             auto [red, blue] = m_computer.init_nnue();
-            m_computer.m_nnue.init(red, blue);
+            throw "help";
+            // m_computer.m_nnue.init(red, blue);
 
             m_computer.m_timer.start(10000);
         }
