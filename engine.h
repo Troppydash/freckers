@@ -320,29 +320,24 @@ namespace engine {
                     mask piece = 1ull << index;
                     m ^= piece;
 
-                    m_nnue.add_feature(RED, 64 + index);
-                    m_nnue.add_feature(BLUE, 64 + (index ^ 56));
+                    m_nnue.addlily_feature(64 * 2 + index, 64 * 2 + (index ^ 56));
                 }
             } else if (position.m_turn == board::RED) {
                 int start = __builtin_ctzll(move.m_start);
                 int end = __builtin_ctzll(move.m_end);
 
                 // add piece
-                m_nnue.move_feature(RED, start, end);
-
                 // remove lilypad
-                m_nnue.remove_feature(RED, 64 + start);
-                m_nnue.remove_feature(BLUE, 64 + (start ^ 56));
+                m_nnue.subaddsub_feature(RED, start, end, 64 * 2 + start);
+                m_nnue.subaddsub_feature(BLUE, 64 + (start ^ 56), 64 + (end ^ 56), 64 * 2 + (start ^ 56));
             } else {
                 int start = __builtin_ctzll(move.m_start);
                 int end = __builtin_ctzll(move.m_end);
 
                 // add piece
-                m_nnue.move_feature(BLUE, start ^ 56, end ^ 56);
-
                 // remove lilypad
-                m_nnue.remove_feature(RED, 64 + start);
-                m_nnue.remove_feature(BLUE, 64 + (start ^ 56));
+                m_nnue.subaddsub_feature(BLUE, start ^ 56, end ^ 56, 64 * 2 + (start ^ 56));
+                m_nnue.subaddsub_feature(RED, 64 + start, 64 + end, 64 * 2 + start);
             }
         }
 
@@ -354,25 +349,20 @@ namespace engine {
                     mask piece = 1ull << index;
                     m ^= piece;
 
-                    m_nnue.remove_feature(RED, 64 + index);
-                    m_nnue.remove_feature(BLUE, 64 + (index ^ 56));
+                    m_nnue.sublily_feature(64 * 2 + index, 64 * 2 + (index ^ 56));
                 }
             } else if (position.m_turn == board::RED) {
                 int start = __builtin_ctzll(move.m_start);
                 int end = __builtin_ctzll(move.m_end);
 
-                m_nnue.move_feature(RED, end, start);
-
-                m_nnue.add_feature(RED, 64 + start);
-                m_nnue.add_feature(BLUE, 64 + (start ^ 56));
+                m_nnue.subaddadd_feature(RED, end, start, 64 * 2 + start);
+                m_nnue.subaddadd_feature(BLUE, 64 + (end ^ 56), 64 + (start ^ 56), 64 * 2 + (start ^ 56));
             } else {
                 int start = __builtin_ctzll(move.m_start);
                 int end = __builtin_ctzll(move.m_end);
 
-                m_nnue.move_feature(BLUE, end ^ 56, start ^ 56);
-
-                m_nnue.add_feature(RED, 64 + start);
-                m_nnue.add_feature(BLUE, 64 + (start ^ 56));
+                m_nnue.subaddadd_feature(BLUE, end ^ 56, start ^ 56, 64 * 2 + (start ^ 56));
+                m_nnue.subaddadd_feature(RED, 64 + end, 64 + start, 64 * 2 + start);
             }
         }
 

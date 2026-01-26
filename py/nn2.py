@@ -12,14 +12,14 @@ from torch.utils.data import Dataset
 
 import engine
 
-HIDDEN_SIZE = 256
+HIDDEN_SIZE = 128
 SCALE = 40 * 100
-INPUT_SIZE = 4 * 64
+INPUT_SIZE = 6 * 64
 device = 'cuda'
 # data file
 pk_file = 'session6'
 # model file
-session = 'session74_4'
+session = 'session75'
 
 
 def screlu(x):
@@ -33,15 +33,15 @@ def sigmoid(x):
 class NNUE2(nn.Module):
     def __init__(self):
         super().__init__()
-        self.l0 = nn.Linear(64 * 2, HIDDEN_SIZE, dtype=torch.float32)
+        self.l0 = nn.Linear(64 * 3, HIDDEN_SIZE, dtype=torch.float32)
         self.l1 = nn.Linear(2 * HIDDEN_SIZE, 1, dtype=torch.float32)
 
     def forward(self, x):
         x = torch.flatten(x, 1)
 
         # x shape is [side2move, lily, flip_notside2move, fliplily]
-        stm = x[:, :2 * 64]
-        ntm = x[:, 2 * 64:]
+        stm = x[:, :3 * 64]
+        ntm = x[:, 3 * 64:]
 
         stm_acc = screlu(self.l0(stm))
         ntm_acc = screlu(self.l0(ntm))
@@ -68,8 +68,6 @@ def bitmask_to_array(mask: int):
     )
 
 
-
-
 def flip_array_np(arr):
     """
     arr: 1D array of length 64
@@ -77,6 +75,7 @@ def flip_array_np(arr):
     """
     idx = np.arange(64) ^ 56
     return arr[idx]
+
 
 # def flip_array(arr: list[int]):
 #     out = [0] * 64
@@ -117,16 +116,18 @@ class FreckersDataset(Dataset):
                 eval = dataset.evals[i]
 
                 # skip condition
-                if abs(moves) < 4 or random.random() > 0.75:
+                if abs(moves) < 4 or random.random() > 0.25:
                     skipped += 1
                     continue
 
                 if turn == 0:
                     # if red
-                    X.append(np.concatenate([red, lily, flip_array_np(blue), flip_array_np(lily)]))
+                    X.append(
+                        np.concatenate([red, blue, lily, flip_array_np(blue), flip_array_np(red), flip_array_np(lily)]))
                 else:
                     # if blue
-                    X.append(np.concatenate([flip_array_np(blue), flip_array_np(lily), red, lily]))
+                    X.append(
+                        np.concatenate([flip_array_np(blue), flip_array_np(red), flip_array_np(lily), red, blue, lily]))
 
                 if outcome == turn:
                     game_result = 1
@@ -147,7 +148,6 @@ class FreckersDataset(Dataset):
                 y.append([target])
 
             print(f"skipped {skipped / len(dataset.positions) * 100:.2f}%")
-            # break
 
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, INPUT_SIZE)
         self.y = torch.tensor(y, dtype=torch.float32)
