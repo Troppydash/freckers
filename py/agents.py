@@ -1,6 +1,9 @@
 import ctypes
 import os
 import random
+import shutil
+import tempfile
+import uuid
 
 from engine import Engine, Pos, Move
 
@@ -8,7 +11,13 @@ from engine import Engine, Pos, Move
 def load_dll(name):
     dirname = os.path.dirname(__file__)
     lib_file = os.path.join(dirname, f"./binaries/{name}")
-    cpp = ctypes.cdll.LoadLibrary(lib_file)
+
+    rand = uuid.uuid4()
+    temp_dir = tempfile.gettempdir()
+    temp_file = os.path.join(temp_dir, f"{rand}.so")
+    shutil.copy2(lib_file, temp_file)
+
+    cpp = ctypes.cdll.LoadLibrary(temp_file)
     return cpp
 
 
@@ -145,6 +154,15 @@ class V73(Engine):
 
         dirname = os.path.dirname(__file__)
         weights = os.path.join(dirname, './binaries/v73/')
+        self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
+
+
+class V74(Engine):
+    def __init__(self):
+        super().__init__(load_dll('v74/libfrecker.so'))
+
+        dirname = os.path.dirname(__file__)
+        weights = os.path.join(dirname, './binaries/v74/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
 

@@ -1,12 +1,20 @@
 import dataclasses
 import ctypes
 import os
+import shutil
+import tempfile
+import uuid
 
 
 def load_dll():
     dirname = os.path.dirname(__file__)
     lib_file = os.path.join(dirname, "./binaries/libfrecker.so")
-    cpp = ctypes.cdll.LoadLibrary(lib_file)
+    rand = uuid.uuid4()
+    temp_dir = tempfile.gettempdir()
+    temp_file = os.path.join(temp_dir, f"{rand}.so")
+    shutil.copy2(lib_file, temp_file)
+
+    cpp = ctypes.cdll.LoadLibrary(temp_file)
     return cpp
 
 

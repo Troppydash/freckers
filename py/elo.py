@@ -10,6 +10,8 @@ from engine import Pos, Engine
 import matplotlib.pyplot as plt
 
 
+folder = 'elos/bt1'
+
 def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_avg_elo=1000, iters=10000):
     """
     Takes a list of names and wins, compute the relative elo scores
@@ -46,14 +48,14 @@ def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_a
 
 
 def playoff(engine1, engine2):
-    ts = 300
+    ts = 500
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
     pos = Pos()
 
     # random moves
-    left = 5
+    left = 7
     while pos.state() == pos.NONE and left > 0:
         # if random.random() < 0.9:
         # if random.random() < 0.5:
@@ -101,7 +103,7 @@ def round(agents, elos, wins, names):
     n = len(agents)
     # k = 30
 
-    with multiprocessing.Pool(6) as p:
+    with multiprocessing.Pool(10) as p:
         matchups = []
         for i in range(n):
             for j in range(i + 1, n):
@@ -131,23 +133,23 @@ def round(agents, elos, wins, names):
 
 def save_wins(wins):
     import pickle
-    with open('bradley_terry_wins.pk', 'wb') as f:
+    with open(f'{folder}/bradley_terry_wins.pk', 'wb') as f:
         pickle.dump(wins, f)
 
 
 def load_wins():
     import pickle
-    with open('bradley_terry_wins.pk', 'rb') as f:
+    with open(f'{folder}/bradley_terry_wins.pk', 'rb') as f:
         return pickle.load(f)
 
 
 def save_elos(elos):
-    with open('bradley_terry_elo.json', 'w') as f:
+    with open(f'{folder}/bradley_terry_elo.json', 'w') as f:
         json.dump(elos, f)
 
 
 def load_elos(agents):
-    with open('bradley_terry_elo.json', 'r') as f:
+    with open(f'{folder}/bradley_terry_elo.json', 'r') as f:
         elos = json.load(f)
 
     best = 1
@@ -172,29 +174,12 @@ def plot_elos(elos):
     ax.grid()
     plt.xlabel('iteration')
     plt.ylabel('elo')
-    fig.savefig("bradley_terry_elo.png", bbox_inches="tight")
+    fig.savefig(f"{folder}/bradley_terry_elo.png", bbox_inches="tight")
 
     plt.close(fig)
 
 
 if __name__ == '__main__':
-    # A, B, C, D = 'A', 'B', 'C', 'D'
-    # wins = {
-    #     (A, B): 2,
-    #     (A, C): 0,
-    #     (A, D): 1,
-    #     (B, A): 3,
-    #     (B, C): 5,
-    #     (B, D): 0,
-    #     (C, A): 0,
-    #     (C, B): 3,
-    #     (C, D): 1,
-    #     (D, A): 4,
-    #     (D, B): 0,
-    #     (D, C): 3,
-    # }
-    # print(bradley_terry([A, B, C, D], wins, 100))
-
     agents = [agents.V0, agents.V1, agents.V2, agents.V32, agents.V4, agents.V5, agents.V62, agents.V73,
               agents.Latest]
     names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]

@@ -62,7 +62,7 @@ void play(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int 
     lock.lock();
 
     board::pos pos{lily, red, blue, turn, moves};
-    engine::lazysmp engine{2};
+    engine::lazysmp engine{1};
     instances[handle].last_move = engine.search(pos, ts, &instances[handle].last_score, get_weights(instances[handle].weights), engine::computer_config{}, verbose);
 
     lock.unlock();
@@ -71,7 +71,7 @@ void play(int handle, uint64_t lily, uint64_t red, uint64_t blue, int turn, int 
 void play_board(int handle, int ts, int verbose) {
     lock.lock();
 
-    engine::lazysmp engine{2};
+    engine::lazysmp engine{1};
     instances[handle].last_move = engine.search(instances[handle].last_pos, ts, &instances[handle].last_score, get_weights(instances[handle].weights), engine::computer_config{}, verbose);
 
     lock.unlock();
@@ -473,7 +473,7 @@ int main() {
 
         if (pos.m_turn == board::RED) {
             printf("start\n");
-            engine::lazysmp lazy(10);
+            engine::lazysmp lazy(1);
             auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
             //            engine::computer engine{pos, get_weights("../")};
             //            auto move = engine.search(2000, nullptr, true);
@@ -482,7 +482,7 @@ int main() {
 
         } else {
             printf("start\n");
-            engine::lazysmp lazy(10);
+            engine::lazysmp lazy(1);
             auto move = lazy.search(pos, 5000, nullptr, get_weights("../"), engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
