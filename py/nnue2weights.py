@@ -4,11 +4,10 @@ import numpy as np
 import nn2
 from nn2 import NNUE2
 
-base = './models/session75/'
-file = f"{base}model_74.pt"
-model = torch.load(file)
+base = './models/session75_2/'
+file = f"{base}model_60.pt"
 
-HIDDEN_SIZE = 128
+HIDDEN_SIZE = 256
 QA = 255
 QB = 64
 

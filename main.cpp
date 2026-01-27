@@ -108,15 +108,15 @@ int ponder_depth(int handle) {
 }
 
 uint64_t ponder_start(int handle) {
-    return instances[handle].analysis->m_line[0].m_start;
+    return instances[handle].analysis->m_computer.m_line.get_moves()[0].m_start;
 }
 
 uint64_t ponder_end(int handle) {
-    return instances[handle].analysis->m_line[0].m_end;
+    return instances[handle].analysis->m_computer.m_line.get_moves()[0].m_end;
 }
 
 uint64_t ponder_grow(int handle) {
-    return instances[handle].analysis->m_line[0].m_grow;
+    return instances[handle].analysis->m_computer.m_line.get_moves()[0].m_grow;
 }
 
 int get_last_score(int handle) {
@@ -454,38 +454,23 @@ void test_a_star_position() {
 //     }
 // }
 
+#include "optimizer.h"
+
+void optimize() {
+    optimizer opt;
+
+    engine::computer_config initial{};
+    opt.load_config(initial);
+    opt.load_targets("../py/texel2.txt");
+
+    opt.optimize(100);
+}
 
 int main() {
-    // texel_tune();
-    // return 0;
-    //    test_position();
-    //    return 0;
+    optimize();
 
-    // board::pos p;
-
-    // int value = eval.evaluate(p);
-    // std::cout << value;
-    //
-    // return 0;
+    return 0;
     board::pos pos;
-    //
-    //
-    // engine::nnue_evaluator eval;
-    // eval.load_nnue("../weights/nnue.bin");
-    // eval.initialize(pos);
-    //
-    // // auto p = pos.get_moves()[5];
-    // auto p = board::move::null();
-    // eval.push_move(pos, p);
-    // pos.push(p);
-    //
-    // // auto p2 = pos.get_moves()[0];
-    // // pos.push(p2);
-    // // pos.pop(p2);
-    // // pos.pop(p);
-    // // eval.pop_move(pos, p);
-    //
-    // std::cout << eval.evaluate(pos);
 
     while (pos.get_state() == board::NONE) {
         if (pos.m_turn == board::RED) {
@@ -499,7 +484,7 @@ int main() {
         if (pos.m_turn == board::RED) {
             printf("start\n");
             engine::lazysmp lazy(1);
-            auto move = lazy.search(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
+            auto move = lazy.search_one(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
 

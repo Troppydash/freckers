@@ -168,7 +168,7 @@ namespace engine {
                 return;
 
             auto current = now();
-            if (current > m_target) {
+            if (current >= m_target) {
                 m_is_stopped = true;
             }
         }
@@ -206,8 +206,21 @@ namespace engine {
             m_lily_min = 3;
             m_lily_scale = 9;
             m_window = 5;
-            m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
             m_window_scale = 5;
+            m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
+
+            // m_lmp_margins = {0, 4, 10, 12, 16, 25};
+            // m_lmr_depth = 8;
+            // m_lmr_move = 5;
+            // m_tempo = 56;
+            // m_static_null_move_margin = 402;
+            // m_countermove = 6;
+            // m_lily_min = 5;
+            // m_lily_scale = 6;
+            // m_window = 2;
+            // m_window_scale = 2;
+            // m_fut_margins = {6, 103, 172, 212, 276, 340, 402, 468, 527};
+
 
             // m_lmp_margins = {0, 8, 12, 18, 22, 24};
             // m_lmr_depth = 4;
@@ -313,6 +326,9 @@ namespace engine {
         }
 
         void push_move(const board::pos &position, const board::move &move) {
+            m_nnue.clone_ply();
+            m_nnue.m_ply += 1;
+
             if (move.is_grow()) {
                 mask m = move.m_grow;
                 while (m > 0) {
@@ -342,6 +358,9 @@ namespace engine {
         }
 
         void pop_move(const board::pos &position, const board::move &move) {
+            m_nnue.m_ply -= 1;
+            return;
+
             if (move.is_grow()) {
                 mask m = move.m_grow;
                 while (m > 0) {
@@ -375,6 +394,36 @@ namespace engine {
         }
     };
 
+    struct pv_line {
+        // pv_table[ply][i] is the ith pv move at ply
+        board::move pv_table[param::max_depth][param::max_depth];
+
+        // pv_length[ply] is the number of moves at ply
+        int pv_length[param::max_depth]{};
+
+        explicit pv_line() = default;
+
+        void ply_init(int32_t ply) {
+            pv_length[ply] = ply;
+        }
+
+        void update(int32_t ply, const board::move &move) {
+            pv_table[ply][ply] = move;
+            for (int i = ply + 1; i < pv_length[ply + 1]; i++)
+                pv_table[ply][i] = pv_table[ply + 1][i];
+
+            pv_length[ply] = pv_length[ply + 1];
+        }
+
+        std::vector<board::move> get_moves() const {
+            std::vector<board::move> result(pv_length[0]);
+            for (int i = 0; i < pv_length[0]; ++i) {
+                result[i] = pv_table[0][i];
+            }
+            return result;
+        }
+    };
+
     class computer {
     public:
         table &m_tt;
@@ -385,15 +434,15 @@ namespace engine {
         int m_lmr[param::max_depth][100];
         move m_killers[param::max_depth][2];
         move m_counter[2][64][64];
+        pv_line m_line{};
 
         // unused
-        // nnue::seq m_nnue;
         nnue_evaluator m_nnue_evaluator;
         struct eval_cache {
             int score;
             uint64_t hash;
         };
-        constexpr static size_t EVAL_CACHE_SIZE = 64 * 1024 * 1024 / sizeof(eval_cache);
+        constexpr static size_t EVAL_CACHE_SIZE = 32 * 1024 * 1024 / sizeof(eval_cache);
         std::vector<eval_cache> m_eval_cache{EVAL_CACHE_SIZE};
 
         computer_config m_config;
@@ -401,11 +450,11 @@ namespace engine {
         timer m_timer;
 
 
-        explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights)
+        explicit computer(pos &pos, table &tt, timer timer, std::vector<std::string> weights)
             : computer(pos, tt, timer, std::move(weights), computer_config()) {}
 
 
-        explicit computer(pos pos, table &tt, timer timer, std::vector<std::string> weights, computer_config config)
+        explicit computer(pos &pos, table &tt, timer timer, std::vector<std::string> weights, computer_config config)
             : m_tt(tt), m_pos(pos), m_searched(0), m_config(config), m_timer(timer) {
 
             m_nnue_evaluator.load_nnue(weights[0]);
@@ -505,7 +554,7 @@ namespace engine {
                 return m_eval_cache[hash % EVAL_CACHE_SIZE].score;
 
             int eval = nnue_evaluate();
-            if (std::abs(eval) <= 4 * 100)
+            if (std::abs(eval) <= 6 * 100)
                 eval += m_config.m_tempo;
 
             m_eval_cache[hash % EVAL_CACHE_SIZE].score = eval;
@@ -608,7 +657,7 @@ namespace engine {
         }
 
         void incr_counter(const move &prev_move, move &move) {
-            if (prev_move.is_storable() && move.is_slient()) {
+            if (prev_move.is_storable() && move.is_quiet()) {
                 auto coord = prev_move.get_coords();
                 m_counter[m_pos.m_turn][coord.first][coord.second] = move;
             }
@@ -641,7 +690,7 @@ namespace engine {
         }
 
         void store_killer(int ply, const move &killer) {
-            if (killer.is_slient()) {
+            if (killer.is_quiet()) {
                 if (m_killers[ply][0] != killer) {
                     m_killers[ply][1] = m_killers[ply][0];
                     m_killers[ply][0] = killer;
@@ -865,8 +914,9 @@ namespace engine {
         //        }
 
 
-        int negamax(int depth, int ply, int alpha, int beta, std::vector<move> &pv_line, const move &prev_move, bool do_null = true) {
+        int negamax(int depth, int ply, int alpha, int beta, const move &prev_move, bool do_null = true) {
             m_searched += 1;
+            m_line.ply_init(ply);
 
             if (m_searched % 2048 == 0) {
                 m_timer.check();
@@ -889,9 +939,6 @@ namespace engine {
                 return evaluate();
             }
 
-            //            if (!m_pos.has_move()) {
-            //                depth += 1;
-            //            }
 
             bool is_root = ply == 0;
             bool is_pv_node = (beta - alpha) != 1;
@@ -940,8 +987,7 @@ namespace engine {
                 m_pos.push(null);
 
                 int r = 3 + depth / 6;
-                std::vector<move> child_pv_line;
-                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, child_pv_line, null, false);
+                int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, null, false);
                 m_pos.pop(null);
 
                 if (m_timer.is_stopped()) {
@@ -974,21 +1020,19 @@ namespace engine {
             }
 
 
-            std::vector<move> child_pv_line;
-
             // internal ID
-            //            if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-            //                negamax(depth - 2 - 1, ply + 1, -beta, -alpha, child_pv_line, move::null());
+            // if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+            //     negamax(depth - 2 - 1, ply + 1, -beta, -alpha, move::null());
             //
-            //                if (m_timer.m_is_stopped) {
-            //                    return 0;
-            //                }
+            //     if (m_timer.is_stopped()) {
+            //         return 0;
+            //     }
             //
-            //                if (!child_pv_line.empty()) {
-            //                    tt_move = child_pv_line[0];
-            //                    child_pv_line.clear();
-            //                }
-            //            }
+            //     if (!child_pv_line.empty()) {
+            //         tt_move = child_pv_line[0];
+            //         child_pv_line.clear();
+            //     }
+            // }
 
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
@@ -1039,24 +1083,21 @@ namespace engine {
 
                 int score;
                 if (explored_moves == 1) {
-                    score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
+                    score = -negamax(depth - 1, ply + 1, -beta, -alpha, move);
                 } else {
                     int reduction = 0;
                     if (!is_pv_node && explored_moves >= 3 && depth >= 3 && !move.is_jump()) {
                         reduction = m_lmr[depth][explored_moves];
                     }
 
-                    score = -negamax(depth - 1 - reduction, ply + 1, -(alpha + 1), -alpha, child_pv_line, move);
+                    score = -negamax(depth - 1 - reduction, ply + 1, -(alpha + 1), -alpha, move);
                     if (score > alpha && reduction > 0) {
-                        child_pv_line.clear();
-                        score = -negamax(depth - 1, ply + 1, -(alpha + 1), -alpha, child_pv_line, move);
+                        score = -negamax(depth - 1, ply + 1, -(alpha + 1), -alpha, move);
                         if (score > alpha) {
-                            child_pv_line.clear();
-                            score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
+                            score = -negamax(depth - 1, ply + 1, -beta, -alpha, move);
                         }
                     } else if (alpha < score && score < beta) {
-                        child_pv_line.clear();
-                        score = -negamax(depth - 1, ply + 1, -beta, -alpha, child_pv_line, move);
+                        score = -negamax(depth - 1, ply + 1, -beta, -alpha, move);
                     }
                 }
                 m_pos.pop(move);
@@ -1091,14 +1132,8 @@ namespace engine {
                 if (score > alpha) {
                     alpha = score;
                     tt_flag = param::exact_flag;
-                    pv_line.clear();
-                    pv_line.push_back(move);
-                    for (auto m: child_pv_line) {
-                        pv_line.push_back(m);
-                    }
+                    m_line.update(ply, move);
                 }
-
-                child_pv_line.clear();
 
                 // compute full list if tt failed to beta cutoff
                 if (explored_moves == 1 && !tt_move.is_null()) {
@@ -1117,78 +1152,9 @@ namespace engine {
         }
 
 
-        std::pair<std::vector<int32_t>, std::vector<int32_t>> init_nnue() {
-            std::vector<int32_t> red;
-            for (int i = 0; i < 64; ++i) {
-                if (m_pos.m_lilypads & (1ull << i)) {
-                    red.push_back(1);
-                } else {
-                    red.push_back(0);
-                }
-            }
-
-            for (int i = 0; i < 64; ++i) {
-                if (m_pos.m_players[0] & (1ull << i)) {
-                    red.push_back(1);
-                } else {
-                    red.push_back(0);
-                }
-            }
-
-            std::vector<int32_t> blue;
-            for (int i = 0; i < 64; ++i) {
-                if (m_pos.m_lilypads & (1ull << (63 - i))) {
-                    blue.push_back(1);
-                } else {
-                    blue.push_back(0);
-                }
-            }
-
-            for (int i = 0; i < 64; ++i) {
-                if (m_pos.m_players[1] & (1ull << (63 - i))) {
-                    blue.push_back(1);
-                } else {
-                    blue.push_back(0);
-                }
-            }
-
-            return {red, blue};
-        }
-
-        void reset(board::pos position) {
-            m_pos = position;
-            for (auto &i: m_history) {
-                for (auto &j: i) {
-                    for (int &k: j) {
-                        k = 0;
-                    }
-                }
-            }
-
-            for (auto &m: m_killers) {
-                m[0] = move::null();
-                m[1] = move::null();
-            }
-
-            for (auto &i: m_counter) {
-                for (auto &j: i) {
-                    for (auto &k: j) {
-                        k = move::null();
-                    }
-                }
-            }
-
-            // reset tt
-            for (auto &entry: m_tt.m_entries) {
-                entry.m_hash = 0;
-            }
-        }
-
         void init() {
             m_searched = 0;
             m_nnue_evaluator.initialize(m_pos);
-            // auto [red, blue] = init_nnue();
-            // m_nnue.init(red, blue);
         }
 
         //        move search(int ts, int *new_score, bool verbose, int max_depth = param::max_depth) {
@@ -1308,9 +1274,9 @@ namespace engine {
         threadpool m_pool;
         table m_tt;
 
-        explicit lazysmp(int threads)
+        explicit lazysmp(int threads, int table = 1024)
             // need one less thread since we are the main thread
-            : m_threads(threads), m_pool(threads), m_tt(2048) {
+            : m_threads(threads), m_pool(threads), m_tt(table) {
         }
 
 
@@ -1330,12 +1296,105 @@ namespace engine {
             return stream.str();
         }
 
+        std::string get_score_uci(int score) {
+            if (score > param::checkmate) {
+                int ply = param::inf - score;
+                return std::string{"ply "} + std::to_string(ply);
+            }
+
+            if (score < -param::checkmate) {
+                int ply = -param::inf - score;
+                return std::string{"ply "} + std::to_string(ply);
+            }
+
+            return std::string{"cp "} + std::to_string(score);
+        }
+
         int thread_value(int score, int worse_score, int depth) const {
             return (score - worse_score) + 500 * depth;
         }
 
+        move search_one(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
+            m_timer.start(ts);
+            auto start = m_timer.now();
+
+            computer computer{pos, m_tt, m_timer, weights, config};
+            computer.init();
+
+            int alpha = -param::inf;
+            int beta = param::inf;
+            int depth = 1;
+            move null = move::null();
+            move best_move = move::null();
+            int last_score = 0;
+            while (depth <= max_depth) {
+                int score = computer.negamax(depth, 0, alpha, beta, null, true);
+
+                if (computer.m_timer.is_stopped()) {
+                    if (!computer.m_line.get_moves().empty())
+                        best_move = computer.m_line.get_moves()[0];
+
+                    break;
+                }
+
+                if (score <= alpha || score >= beta) {
+                    if (score <= alpha) {
+                        alpha = last_score + (alpha - last_score) * config.m_window_scale;
+                        if (alpha <= -40 * 100) {
+                            alpha = -param::inf;
+                        }
+                    }
+
+                    if (score >= beta) {
+                        beta = last_score + (beta - last_score) * config.m_window_scale;
+                        if (beta >= 40 * 100) {
+                            beta = param::inf;
+                        }
+                    }
+
+                    continue;
+                }
+
+                if (verbose) {
+                    auto duration = m_timer.now() - start;
+                    long nps = static_cast<long>(computer.m_searched) * 1000 / duration.count();
+
+                    std::cout << "info"
+                              << " depth " << depth
+                              << " score " << get_score_uci(score)
+                              << " nodes " << computer.m_searched
+                              << " nps " << nps
+                              << " time " << duration.count()
+                              << " hashfull " << (int) (1000 * m_tt.occupied())
+                              << " pv";
+
+                    for (auto move: computer.m_line.get_moves()) {
+                        std::cout << " " << move.display().c_str();
+                    }
+                    std::cout << std::endl;
+                }
+
+                if (new_score != nullptr)
+                    *new_score = score;
+
+                alpha = score - config.m_window * 100;
+                beta = score + config.m_window * 100;
+                best_move = computer.m_line.get_moves()[0];
+                last_score = score;
+                depth += 1;
+            }
+
+            if (verbose)
+                std::cout << "info nodes " << computer.m_searched << std::endl;
+
+            return best_move;
+        }
 
         move search(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
+            if (m_threads == 1) {
+                return search_one(pos, ts, new_score, weights, config, verbose, max_depth);
+            }
+
             m_timer.start(ts);
 
             // setup
@@ -1352,14 +1411,13 @@ namespace engine {
                 printf("searching with %d threads\n", m_threads);
 
             // search depth one fully using the first comp
-            std::vector<move> pv_line;
             move null = move::null();
             int alpha = -param::inf;
             int beta = param::inf;
             int depth = 1;
-            int score = computers[root_thread].negamax(depth, 0, alpha, beta, pv_line, null);
+            int score = computers[root_thread].negamax(depth, 0, alpha, beta, null);
             depth += 1;
-            move best_move = pv_line[0];
+            move best_move = computers[root_thread].m_line.get_moves()[0];
             if (new_score != nullptr)
                 *new_score = score;
 
@@ -1409,9 +1467,8 @@ namespace engine {
                         bool is_retry = false;
 
                         while (true) {
-                            std::vector<move> pv_line;
                             move null = move::null();
-                            int score = context.computer.negamax(depth, 0, alpha, beta, pv_line, null);
+                            int score = context.computer.negamax(depth, 0, alpha, beta, null);
 
                             if (context.computer.m_timer.is_stopped()) {
                                 if (!is_retry) {
@@ -1443,7 +1500,7 @@ namespace engine {
                                 continue;
                             }
 
-                            context.best_move = pv_line;
+                            context.best_move = context.computer.m_line.get_moves();
                             context.depths = depth;
                             context.score = score;
                             is_ok[context.i] = true;
@@ -1476,8 +1533,7 @@ namespace engine {
                             best_moves[root_thread],
                             scores[root_thread],
                             depths[root_thread]};
-                    std::vector<move> pv_line;
-                    int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, pv_line, null);
+                    int score = context.computer.negamax(context.depth, 0, context.alpha, context.beta, null);
 
                     if (context.computer.m_timer.is_stopped()) {
                         // dont update
@@ -1505,7 +1561,7 @@ namespace engine {
                         continue;
                     }
 
-                    context.best_move = pv_line;
+                    context.best_move = context.computer.m_line.get_moves();
                     context.depths = context.depth;
                     context.score = score;
                     is_ok[root_thread] = true;
@@ -1625,12 +1681,11 @@ namespace engine {
         int m_depth = 1;
         int m_score = 0;
         computer m_computer;
-        std::vector<move> m_line;
 
         explicit analysis(computer &&computer)
             : m_computer(std::move(computer)) {
 
-            auto [red, blue] = m_computer.init_nnue();
+            // auto [red, blue] = m_computer.init_nnue();
             throw "help";
             // m_computer.m_nnue.init(red, blue);
 
@@ -1644,9 +1699,8 @@ namespace engine {
 
             int alpha = -param::inf;
             int beta = param::inf;
-            m_line.clear();
             move null = move::null();
-            int score = m_computer.negamax(m_depth, 0, alpha, beta, m_line, null);
+            int score = m_computer.negamax(m_depth, 0, alpha, beta, null);
             if (m_computer.m_timer.is_stopped()) {
                 return m_score;
             }

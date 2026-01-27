@@ -3,6 +3,7 @@ import math
 import os
 import pickle
 import random
+import re
 
 import numpy as np
 import torch
@@ -10,24 +11,21 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data import Dataset
 
-import engine
+HIDDEN_SIZE = 256
 
-HIDDEN_SIZE = 128
-SCALE = 40 * 100
+WDL_SCALE = 2684
+ENGINE_SCALE = 40 * 100
+
 INPUT_SIZE = 6 * 64
 device = 'cuda'
 # data file
 pk_file = 'session6'
 # model file
-session = 'session75'
+session = 'session75_2'
 
 
 def screlu(x):
     return torch.square(torch.clamp(x, 0, 1))
-
-
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
 
 
 class NNUE2(nn.Module):
@@ -49,7 +47,7 @@ class NNUE2(nn.Module):
 
 
 def sigmoid_loss(pred, y):
-    return torch.mean(torch.pow(torch.abs((torch.tanh(pred) - y)), 2.4))
+    return torch.mean(torch.pow(torch.abs((torch.tanh(pred * ENGINE_SCALE / WDL_SCALE) - y)), 2.6))
 
 
 # def bitmask_to_array(mask: int):
@@ -103,6 +101,12 @@ class FreckersDataset(Dataset):
                 print(f'skipping: {e}')
                 continue
 
+            pattern = r"session\d+_(?:\((current)\)|v(\d+)(?:\(\d+\))?)vs(?:\((current)\)|v(\d+)(?:\(\d+\))?)\.pk"
+            match = re.findall(pattern, os.path.basename(file))[0]
+            fil = [x for x in match if x]
+            players = fil
+            print(f"[dataset] {players[0]} vs {players[1]}")
+
             skipped = 0
             for i in range(len(dataset.positions)):
                 positions = dataset.positions[i]
@@ -112,11 +116,12 @@ class FreckersDataset(Dataset):
                 blue = bitmask_to_array(positions[2])
                 turn = positions[3]
                 moves = positions[4]
+                total = dataset.flags[i]
 
                 eval = dataset.evals[i]
 
                 # skip condition
-                if abs(moves) < 4 or random.random() > 0.25:
+                if abs(moves) < 4 or random.random() > 0.7:
                     skipped += 1
                     continue
 
@@ -138,17 +143,23 @@ class FreckersDataset(Dataset):
 
                 # our score is in the perspective of the moving player
                 wdl = 0.85
-                if eval > 100000:
+                p = 100 if players[turn] == 'current' else int(players[turn])
+                if p < 5:
+                    other = game_result
+                elif eval > 40 * 100:
                     other = 1
-                elif eval < -100000:
+                elif eval < -40 * 100:
                     other = -1
                 else:
-                    other = math.tanh(eval / SCALE)
+                    other = math.tanh(eval / WDL_SCALE)
+
                 target = wdl * game_result + (1 - wdl) * other
                 y.append([target])
 
             print(f"skipped {skipped / len(dataset.positions) * 100:.2f}%")
 
+        X = np.array(X, dtype=np.float32)
+        y = np.array(y, dtype=np.float32)
         self.X = torch.tensor(X, dtype=torch.float32).reshape(-1, INPUT_SIZE)
         self.y = torch.tensor(y, dtype=torch.float32)
 

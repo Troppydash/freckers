@@ -9,8 +9,8 @@ import agents
 from engine import Pos, Engine
 import matplotlib.pyplot as plt
 
-
 folder = 'elos/bt3'
+
 
 def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_avg_elo=1000, iters=10000):
     """
@@ -22,7 +22,7 @@ def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_a
     :param iters:
     :return:
     """
-    probs = {name: 1.0 for name in names}
+    probs = {name: 0.5 for name in names}
 
     for iter in range(iters):
         geomean = 1.0
@@ -57,20 +57,27 @@ def playoff(engine1, engine2):
     # random moves
     left = 7
     while pos.state() == pos.NONE and left > 0:
-        # if random.random() < 0.9:
-        # if random.random() < 0.5:
-        #     m, _ = engine1.play(game=pos, ts=ts, verbose=False)
-        # else:
-        #     m, _ = engine2.play(game=pos, ts=ts, verbose=False)
-        # pos.push(m)
-        # else:
-        moves = pos.get_moves()
-        pos.push(random.choice(moves))
+        if random.random() < 0.5:
+            m, _ = engine1.play(game=pos, ts=ts // 2, verbose=False)
+        else:
+            m, _ = engine2.play(game=pos, ts=ts // 2, verbose=False)
+        pos.push(m)
         left -= 1
 
     scores = [0, 0]
 
-    def run(pos, engine1_turn):
+    _, e1 = engine1.play(game=pos, ts=ts, verbose=False)
+    _, e2 = engine2.play(game=pos, ts=ts, verbose=False)
+    average = (e1 + e2) // 2  # int
+    if average > 100 * 100:
+        wdl = 1
+    elif average < -100 * 100:
+        wdl = 0
+    else:
+        wdl = 1 / (1 + math.exp(-average / 1000))
+
+    def run(pos, engine1_turn, wdl):
+
         while pos.state() == pos.NONE:
             if pos.turn == engine1_turn:
                 m, _ = engine1.play(game=pos, ts=ts, verbose=False)
@@ -81,17 +88,19 @@ def playoff(engine1, engine2):
 
         winner = pos.state()
         if winner == engine1_turn:
-            scores[0] += 1
+            result = 1
         elif winner == 1 - engine1_turn:
-            scores[1] += 1
+            result = 0
         else:
-            scores[0] += 0.5
-            scores[1] += 0.5
+            result = 0.5
 
-    run(pos.clone(), pos.turn)
-    run(pos.clone(), 1 - pos.turn)
+        scores[0] += result
+        scores[1] += 1 - result
 
-    return scores
+    run(pos.clone(), pos.turn, wdl)
+    run(pos.clone(), 1 - pos.turn, 1 - wdl)
+
+    return scores, abs(wdl - 0.5)
 
 
 def play(x):
@@ -113,22 +122,18 @@ def round(agents, elos, wins, names):
 
         results = p.map(play, matchups)
 
-    for i, j, scores in results:
-        # update result, divide scores by 2
-        print(f"{names[i]} vs {names[j]}: {scores}")
+    for i, j, res in results:
+        scores, bias = res
+        scaling = (1-2*bias)
 
-        normalized = scores[0] / (scores[0] + scores[1])
-        wins[names[i], names[j]] += normalized
-        wins[names[j], names[i]] += (1 - normalized)
+        print(f"{names[i]} vs {names[j]}: scores {scores} bias {bias} scaling {scaling}")
+
+        wins[names[i], names[j]] += scores[0] * scaling
+        wins[names[j], names[i]] += scores[1] * scaling
 
     new_elos = bradley_terry(names, wins)
     for name in names:
         elos[name].append(new_elos[name])
-
-        # probi = 1 / (1 + 10 ** ((elos[names[j]][-1] - elos[names[i]][-1]) / 400))
-        # probj = 1 / (1 + 10 ** ((elos[names[i]][-1] - elos[names[j]][-1]) / 400))
-        # elos[names[i]].append(max(400, elos[names[i]][-1] + k * (scores[0] / 2 - probi)))
-        # elos[names[j]].append(max(400, elos[names[j]][-1] + k * (scores[1] / 2 - probj)))
 
 
 def save_wins(wins):
@@ -184,15 +189,15 @@ if __name__ == '__main__':
     #           agents.Latest]
     # names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
 
-    agents = [agents.V62, agents.V73, agents.V74, agents.V75,
+    agents = [agents.V73, agents.V75,
               agents.Latest]
-    names = ["v6", "v73", "v74", "v75", "latest"]
+    names = ["v73", "v75", "latest"]
 
     assert len(agents) == len(names)
     elos = load_elos(names)
     # plot_elos(elos)
 
-    wins = {(a, b): 0.1 for a in names for b in names}
+    wins = {(a, b): 0.01 for a in names for b in names}
     try:
         wins = load_wins()
         print('loaded wins')

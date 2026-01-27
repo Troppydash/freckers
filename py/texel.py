@@ -4,10 +4,11 @@ import math
 import os
 import pickle
 import random
-from selfplay import Dataset
+import re
 
+from torch.utils.data import Dataset
+WDL_SCALE = 2684
 pk_file = "session6"
-session = "session62"
 
 
 def bitmask_to_array(mask: int):
@@ -37,6 +38,12 @@ def generator():
             print(f'skipping: {e}')
             continue
 
+        pattern = r"session\d+_(?:\((current)\)|v(\d+)(?:\(\d+\))?)vs(?:\((current)\)|v(\d+)(?:\(\d+\))?)\.pk"
+        match = re.findall(pattern, os.path.basename(file))[0]
+        fil = [x for x in match if x]
+        players = fil
+        print(f"[dataset] {players[0]} vs {players[1]}")
+
         for i in range(len(dataset.positions)):
             # 9mllion, requires 10k,
             prob = 50 / 9000
@@ -47,37 +54,46 @@ def generator():
             outcome = dataset.outcomes[i]
             turn = positions[3]
             eval = dataset.evals[i]
+            moves = positions[4]
 
-            xs.append([positions[0], positions[1], positions[2], positions[3]])
+            if abs(moves) < 4:
+                continue
+
+            # [lily, red, blue, turn, moves]
+            xs.append([positions[0], positions[1], positions[2], positions[3], positions[4]])
 
             if outcome == turn:
-                score = 1
+                game_result = 1
             elif outcome == 1 - turn:
-                score = -1
+                game_result = -1
             else:
-                score = 0
+                game_result = 0
 
             # our score is in the perspective of the moving player
-
-            lambda_ = 0.8
-            if eval > 10000:
-                normalized = 1
-            elif eval < -10000:
-                normalized = -1
+            wdl = 0.85
+            p = 100 if players[turn] == 'current' else int(players[turn])
+            if p < 5:
+                other = game_result
+            elif eval > 40 * 100:
+                other = 1
+            elif eval < -40 * 100:
+                other = -1
             else:
-                normalized = 2 / (1 + math.exp(-eval / 1000)) - 1
+                other = math.tanh(eval / WDL_SCALE)
 
-            avg = lambda_ * score + (1 - lambda_) * normalized
-            ys.append([avg])
+            target = wdl * game_result + (1 - wdl) * other
+            ys.append([target])
 
     print(f'loaded {len(ys)} positions')
+
     # write to file
     text = [str(len(ys))]
     for x, y in zip(xs, ys):
-        text.append(f"{x[0]} {x[1]} {x[2]} {x[3]} {y[0]}")
+        text.append(f"{x[0]} {x[1]} {x[2]} {x[3]} {x[4]} {y[0]}")
 
-    with open('texel.txt', 'w') as f:
+    with open('texel2.txt', 'w') as f:
         f.write('\n'.join(text))
+
 
 if __name__ == '__main__':
     generator()

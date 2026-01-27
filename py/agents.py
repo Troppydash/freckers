@@ -156,6 +156,10 @@ class V73(Engine):
         weights = os.path.join(dirname, './binaries/v73/')
         self.cpp.set_weights(self.handle, ctypes.c_char_p(str.encode(weights)))
 
+    def play(self, game: Pos, ts: int, verbose: bool) -> tuple[Move, int]:
+        # fix ts 2/3 bug
+        return super().play(game, int(ts * 2 / 3), verbose)
+
 
 class V74(Engine):
     def __init__(self):

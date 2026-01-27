@@ -10,12 +10,12 @@
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
+#include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
 #include <tuple>
 #include <vector>
-#include <iostream>
 
 namespace board {
     using mask = uint64_t;
@@ -245,6 +245,10 @@ namespace board {
         }
 
         bool is_slient() const {
+            return !(is_jump() || is_null() || is_grow());
+        }
+
+        bool is_quiet() const {
             return !(is_jump() || is_null() || is_grow());
         }
 
