@@ -124,7 +124,7 @@ def round(agents, elos, wins, names):
 
     for i, j, res in results:
         scores, bias = res
-        scaling = (1-2*bias)
+        scaling = (1 - 2 * bias)
 
         print(f"{names[i]} vs {names[j]}: scores {scores} bias {bias} scaling {scaling}")
 
@@ -189,9 +189,9 @@ if __name__ == '__main__':
     #           agents.Latest]
     # names = [ "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "latest"]
 
-    agents = [agents.V73, agents.V75,
+    agents = [agents.V62, agents.V73, agents.V74, agents.V75,
               agents.Latest]
-    names = ["v73", "v75", "latest"]
+    names = ["v62", "v73", "v74", "v75", "latest"]
 
     assert len(agents) == len(names)
     elos = load_elos(names)

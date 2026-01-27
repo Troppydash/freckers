@@ -197,18 +197,63 @@ namespace engine {
 
 
         computer_config() {
-            m_lmp_margins = {0, 6, 10, 14, 16, 20};
-            m_lmr_depth = 3;
-            m_lmr_move = 7;
-            m_tempo = 55;
-            m_static_null_move_margin = 400;
-            m_countermove = 7;
-            m_lily_min = 3;
-            m_lily_scale = 9;
-            m_window = 5;
-            m_window_scale = 5;
-            m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
+            // m_lmp_margins = {0, 6, 10, 14, 16, 20};
+            // m_lmr_depth = 3;
+            // m_lmr_move = 7;
+            // m_tempo = 55;
+            // m_static_null_move_margin = 400;
+            // m_countermove = 7;
+            // m_lily_min = 3;
+            // m_lily_scale = 9;
+            // m_window = 5;
+            // m_window_scale = 5;
+            // m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
 
+            // m_lmp_margins = {0, 4, 10, 12, 15, 18};
+            // m_lmr_depth = 5;
+            // m_lmr_move = 8;
+            // m_tempo = 56;
+            // m_static_null_move_margin = 397;
+            // m_countermove = 8;
+            // m_lily_min = 8;
+            // m_lily_scale = 17;
+            // m_window = 800;
+            // m_window_scale = 3;
+            // m_fut_margins = {0, 97, 160, 220, 275, 349, 405, 458, 520};
+            //
+
+            m_lmp_margins = {0, 7, 9, 12, 15, 15};
+            m_lmr_depth = 5;
+            m_lmr_move = 9;
+            m_tempo = 105;
+            m_static_null_move_margin = 639;
+            m_countermove = 4;
+            m_lily_min = 8;
+            m_lily_scale = 18;
+            m_window = 500;
+            m_window_scale = 3;
+            m_fut_margins = {0, 210, 319, 319, 319, 319, 600, 700, 800};
+
+            /*
+
+            LMP_MARGIN 3 4 10 12 15 13
+            LMR 5 8
+            TEMP 56
+            Static 397
+            Counter 8
+            Lily 8 17
+            Window 8 3
+            FUT 1 97 160 220 275 349 405 458 520
+
+            LMP_MARGIN 0 6 10 14 17 19
+            LMR 3 7
+            TEMP 55
+            Static 400
+            Counter 7
+            Lily 3 9
+            Window 5 6
+            FUT 0 100 160 220 280 340 400 459 521
+             */
             // m_lmp_margins = {0, 4, 10, 12, 16, 25};
             // m_lmr_depth = 8;
             // m_lmr_move = 5;
@@ -274,7 +319,12 @@ namespace engine {
             std::cout << "Static " << m_static_null_move_margin << std::endl;
             std::cout << "Counter " << m_countermove << std::endl;
             std::cout << "Lily " << m_lily_min << " " << m_lily_scale << std::endl;
-            std::cout << "Window " << m_window << std::endl;
+            std::cout << "Window " << m_window << " " << m_window_scale << std::endl;
+
+            std::cout << "FUT ";
+            for (auto m: m_fut_margins) {
+                std::cout << m << " ";
+            }
         }
 
         bool operator<(const computer_config &other) const {
@@ -1314,7 +1364,14 @@ namespace engine {
             return (score - worse_score) + 500 * depth;
         }
 
-        move search_one(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
+        move search_one(
+                pos pos, int ts,
+                int *new_score,
+                const std::vector<std::string> &weights,
+                const computer_config &config,
+                bool verbose,
+                int *reached_depth = nullptr,
+                int max_depth = param::max_depth) {
             m_timer.start(ts);
             auto start = m_timer.now();
 
@@ -1337,6 +1394,7 @@ namespace engine {
                     break;
                 }
 
+
                 if (score <= alpha || score >= beta) {
                     if (score <= alpha) {
                         alpha = last_score + (alpha - last_score) * config.m_window_scale;
@@ -1354,6 +1412,9 @@ namespace engine {
 
                     continue;
                 }
+
+                if (reached_depth != nullptr)
+                    *reached_depth = depth;
 
                 if (verbose) {
                     auto duration = m_timer.now() - start;
@@ -1377,8 +1438,8 @@ namespace engine {
                 if (new_score != nullptr)
                     *new_score = score;
 
-                alpha = score - config.m_window * 100;
-                beta = score + config.m_window * 100;
+                alpha = score - config.m_window;
+                beta = score + config.m_window;
                 best_move = computer.m_line.get_moves()[0];
                 last_score = score;
                 depth += 1;
@@ -1392,7 +1453,7 @@ namespace engine {
 
         move search(pos pos, int ts, int *new_score, const std::vector<std::string> &weights, const computer_config &config, bool verbose, int max_depth = param::max_depth) {
             if (m_threads == 1) {
-                return search_one(pos, ts, new_score, weights, config, verbose, max_depth);
+                return search_one(pos, ts, new_score, weights, config, verbose, nullptr, max_depth);
             }
 
             m_timer.start(ts);
@@ -1422,8 +1483,8 @@ namespace engine {
                 *new_score = score;
 
             int last_score = score;
-            alpha = last_score - config.m_window * 100;
-            beta = last_score + config.m_window * 100;
+            alpha = last_score - config.m_window;
+            beta = last_score + config.m_window;
 
             std::vector<int> scores(m_threads);
             std::vector<std::vector<move>> best_moves(m_threads);
@@ -1509,8 +1570,8 @@ namespace engine {
                             depth += 1;
                             is_retry = true;
                             last_score_ = score;
-                            alpha = last_score_ - config.m_window * 100;
-                            beta = last_score_ + config.m_window * 100;
+                            alpha = last_score_ - config.m_window;
+                            beta = last_score_ + config.m_window;
                         }
 
 
@@ -1656,8 +1717,8 @@ namespace engine {
                     printf("]\n");
                 }
 
-                alpha = last_score - config.m_window * 100;
-                beta = last_score + config.m_window * 100;
+                alpha = last_score - config.m_window;
+                beta = last_score + config.m_window;
 
                 depth += 1;
             }

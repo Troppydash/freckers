@@ -3,6 +3,8 @@ project(frecker)
 
 set(CMAKE_CXX_STANDARD 20)
 
+find_package(libcmaes REQUIRED)
+
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 if (COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -23,5 +25,6 @@ add_executable(frecker_app main.cpp
         aligned.h
 )
 
+target_link_libraries(frecker_app PRIVATE libcmaes::cmaes)
 
 
