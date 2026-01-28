@@ -12,20 +12,17 @@ if (COMPILER_SUPPORTS_MARCH_NATIVE)
     # -ftrapv #  -fopenmp-simd
 endif ()
 
+# lib
 add_library(frecker SHARED main.cpp)
+target_compile_definitions(frecker PRIVATE FRECKER_HARDCODE_CONFIG)
+
+# tuner
+add_executable(frecker_tuner main.cpp)
+target_compile_definitions(frecker_tuner PRIVATE FRECKER_TUNER)
+target_link_libraries(frecker_tuner PRIVATE libcmaes::cmaes)
 
 
-add_executable(frecker_app main.cpp
-        board.h
-        param.h
-        engine.h
-        colors.h
-        nnue.h
-        endgame.h
-        aligned.h
-)
-target_compile_definitions(frecker_app PRIVATE FRECKER_APP)
-
-target_link_libraries(frecker_app PRIVATE libcmaes::cmaes)
+add_executable(frecker_test main.cpp)
+target_compile_definitions(frecker_test PRIVATE FRECKER_HARDCODE_CONFIG)
 
 

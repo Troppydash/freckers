@@ -86,48 +86,38 @@ namespace engine {
     class table {
     public:
         std::vector<entry> m_entries;
-        board::hash m_size;
+        size_t m_size;
+        int m_power;
+        hash m_mask;
 
         explicit table(size_t size_in_mb) {
-            // should prob make this a power of 2
-            m_size = size_in_mb * 1024 * 1024 / sizeof(entry);
+            // make this a power of 2
+            size_t max_size = size_in_mb * 1024 * 1024 / sizeof(entry);
+            m_power = std::floor(std::log2(max_size));
+            m_size = (1ull << m_power);
+            m_mask = m_size - 1;
 
-            for (int i = 0; i < m_size; ++i) {
-                m_entries.push_back(entry{});
-            }
+            m_entries.resize(m_size);
+        }
+
+        size_t get_index(hash h) const {
+            return h & m_mask;
         }
 
         entry &probe(board::hash hash) {
-            board::hash index = hash % m_size;
-            return m_entries[index];
-            //
-            // auto &first = m_entries[index];
-            // if (first.m_hash == hash)
-            //     return first;
-            //
-            // return m_entries[(index + 1) % m_size];
+            // the hash check is done in entry
+            return m_entries[get_index(hash)];
         }
 
-        entry &store(board::hash hash, int depth) {
-            board::hash index = hash % m_size;
-            return m_entries[index];
-
-            // auto &first = m_entries[index];
-            // if (first.m_depth <= depth)
-            // return first;
-
-            // return m_entries[(index + 1) % m_size];
-        }
-
-        double occupied() {
+        double occupied() const {
             int count = 0;
-            for (auto &entry: m_entries) {
+            for (const auto &entry: m_entries) {
                 if (entry.m_hash != 0) {
                     count++;
                 }
             }
 
-            return (double) count / m_entries.size();
+            return static_cast<double>(count) / m_entries.size();
         }
     };
 
@@ -180,6 +170,43 @@ namespace engine {
                     std::chrono::system_clock::now().time_since_epoch());
         }
     };
+
+
+#ifdef FRECKER_HARDCODE_CONFIG
+#define CONFIG_GET(config, entry) (computer_config::entry)
+    struct computer_config {
+        static constexpr std::array<int, 6> m_lmp_margins = {0, 9, 20, 23, 36, 46};
+        static constexpr int m_lmr_depth = 9;
+        static constexpr int m_lmr_move = 16;
+        static constexpr int m_tempo = 32;
+        static constexpr int m_static_null_move_margin = 1011;
+        static constexpr int m_countermove = 49;
+        static constexpr int m_lily_min = 6;
+        static constexpr std::array<int, 9> m_lily_range = {0, 153, 833, 1438, 2071, 2495, 2660, 3340};
+        static constexpr std::array<int, 9> m_fut_margins = {0, 497, 776, 1173, 1185, 1199, 1663};
+        static constexpr int m_razor_mult = 3;
+        static constexpr int m_razor_limit = 6;
+        static constexpr int m_nmr_const = 4;
+        static constexpr int m_nmr_depth = 3;
+        static constexpr int m_tempo_limit = 872;
+        static constexpr int m_long_jump_end_move = 28;
+        static constexpr int m_short_jump_end_move = 47;
+        static constexpr int m_long_jump_vgap_mult = 0;
+        static constexpr int m_long_jump_hgap_mult = 2;
+        static constexpr int m_jump_endgame = 1;
+        static constexpr int m_nmr_min_depth = 3;
+        static constexpr int m_nmr_beta_mult = 3;
+        static constexpr int m_iid_depth = 5;
+        static constexpr int m_iid_depth_reduction = 3;
+        static constexpr int m_tt_eval_prop = 76;
+
+        static constexpr int m_window = 500;
+        static constexpr int m_window_scale = 3;
+    };
+
+#else
+
+#define CONFIG_GET(config, entry) (config.entry)
 
     class computer_config {
     public:
@@ -317,6 +344,7 @@ namespace engine {
             display_one("m_tt_eval_prop", m_tt_eval_prop);
         }
     };
+#endif
 
     struct nnue_evaluator {
         nnue2 m_nnue{};
@@ -449,10 +477,9 @@ namespace engine {
 
         timer m_timer;
 
-
         explicit computer(pos &pos, table &tt, timer timer, std::vector<std::string> weights)
-            : computer(pos, tt, timer, std::move(weights), computer_config()) {}
-
+            : computer(pos, tt, timer, std::move(weights), computer_config()) {
+        }
 
         explicit computer(pos &pos, table &tt, timer timer, std::vector<std::string> weights, computer_config config)
             : m_tt(tt), m_pos(pos), m_searched(0), m_config(config), m_timer(timer) {
@@ -483,7 +510,9 @@ namespace engine {
 
             for (int depth = 0; depth < param::max_depth; ++depth) {
                 for (int move = 0; move < 100; ++move) {
-                    m_lmr[depth][move] = std::max(1, depth / std::max(1, m_config.m_lmr_depth)) + move / std::max(1, m_config.m_lmr_move);
+                    m_lmr[depth][move] = std::max(1,
+                                                  depth / std::max(1, CONFIG_GET(m_config, m_lmr_depth)) +
+                                                          move / std::max(1, CONFIG_GET(m_config, m_lmr_move)));
                 }
             }
         }
@@ -554,8 +583,8 @@ namespace engine {
                 return m_eval_cache[hash % EVAL_CACHE_SIZE].score;
 
             int eval = nnue_evaluate();
-            if (std::abs(eval) <= m_config.m_tempo_limit)
-                eval += m_config.m_tempo;
+            if (std::abs(eval) <= CONFIG_GET(m_config, m_tempo_limit))
+                eval += CONFIG_GET(m_config, m_tempo);
 
             m_eval_cache[hash % EVAL_CACHE_SIZE].score = eval;
             m_eval_cache[hash % EVAL_CACHE_SIZE].hash = hash;
@@ -578,17 +607,17 @@ namespace engine {
                     int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= m_config.m_jump_endgame;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= CONFIG_GET(m_config, m_jump_endgame);
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + m_config.m_long_jump_end_move;
+                        score += param::base_score + CONFIG_GET(m_config, m_long_jump_end_move);
                     } else if (vgap == 0) {
                         score += 0;
                     } else {
-                        score += param::base_score + vgap * m_config.m_long_jump_vgap_mult + hgap * m_config.m_long_jump_hgap_mult;
+                        score += param::base_score + vgap * CONFIG_GET(m_config, m_long_jump_vgap_mult) + hgap * CONFIG_GET(m_config, m_long_jump_hgap_mult);
                     }
                 } else if (move == m_killers[ply][0]) {
                     score += param::base_score + param::killer_move_score;
@@ -599,18 +628,18 @@ namespace engine {
                     auto end = bitboard::get_coord(move.m_end);
                     bool is_red = m_pos.m_turn == board::RED;
 
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= m_config.m_jump_endgame;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= CONFIG_GET(m_config, m_jump_endgame);
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + m_config.m_short_jump_end_move;
+                        score += param::base_score + CONFIG_GET(m_config, m_short_jump_end_move);
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
                             if (move == m_counter[m_pos.m_turn][coord.first][coord.second]) {
-                                score += m_config.m_countermove;
+                                score += CONFIG_GET(m_config, m_countermove);
                             }
                         }
 
@@ -620,10 +649,10 @@ namespace engine {
                     }
                 } else {
                     int count = __builtin_popcountll(move.m_grow);
-                    if (count <= m_config.m_lily_min) {
+                    if (count <= CONFIG_GET(m_config, m_lily_min)) {
                         score -= 10;
                     } else {
-                        score += m_config.m_lily_range[count / 8 + 1];
+                        score += CONFIG_GET(m_config, m_lily_range)[count / 8 + 1];
                     }
                 }
 
@@ -634,14 +663,6 @@ namespace engine {
         }
 
         void sort_scored_moves(std::vector<std::pair<int, int>> &scored_moves, int i) {
-            //            int best_score = scored_moves[i].first;
-            //            for (int j = i + 1; j < scored_moves.size(); ++j) {
-            //                if (scored_moves[j].first > best_score) {
-            //                    best_score = scored_moves[j].first;
-            //                    swap(scored_moves[i], scored_moves[j]);
-            //                }
-            //            }
-
             int best_score = scored_moves[i].first;
             int best_index = i;
             for (int j = i + 1; j < scored_moves.size(); ++j) {
@@ -696,79 +717,6 @@ namespace engine {
             }
         }
 
-        // void push_nnue(move &move) {
-        //     if (move.is_null()) {
-        //         return;
-        //     }
-        //
-        //     if (move.is_grow()) {
-        //         board::mask m = move.m_grow;
-        //         while (m > 0) {
-        //             int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-        //             mask piece = 1ull << index;
-        //             m ^= piece;
-        //
-        //             m_nnue.push_red(index);
-        //             m_nnue.push_blue(63 - index);
-        //         }
-        //     } else if (m_pos.m_turn == board::RED) {
-        //         int i = __builtin_ctzll(move.m_start);
-        //         int j = __builtin_ctzll(move.m_end);
-        //
-        //         m_nnue.push_red(64 + j);
-        //         m_nnue.pop_red(64 + i);
-        //
-        //         m_nnue.pop_red(i);
-        //         m_nnue.pop_blue(63 - i);
-        //     } else {
-        //         int i = __builtin_ctzll(move.m_start);
-        //         int j = __builtin_ctzll(move.m_end);
-        //
-        //         m_nnue.push_blue(64 + 63 - j);
-        //         m_nnue.pop_blue(64 + 63 - i);
-        //
-        //         m_nnue.pop_red(i);
-        //         m_nnue.pop_blue(63 - i);
-        //     }
-        // }
-        //
-        // void pop_nnue(move &move) {
-        //     if (move.is_null()) {
-        //         return;
-        //     }
-        //
-        //     if (move.is_grow()) {
-        //
-        //         board::mask m = move.m_grow;
-        //         while (m > 0) {
-        //             int index = (bitboard::ROWS * bitboard::COLS - __builtin_clzll(m) - 1);
-        //             mask piece = 1ull << index;
-        //             m ^= piece;
-        //
-        //             m_nnue.pop_red(index);
-        //             m_nnue.pop_blue(63 - index);
-        //         }
-        //     } else if (m_pos.m_turn == board::RED) {
-        //         int i = __builtin_ctzll(move.m_start);
-        //         int j = __builtin_ctzll(move.m_end);
-        //
-        //         m_nnue.pop_red(64 + j);
-        //         m_nnue.push_red(64 + i);
-        //
-        //         m_nnue.push_red(i);
-        //         m_nnue.push_blue(63 - i);
-        //     } else {
-        //         int i = __builtin_ctzll(move.m_start);
-        //         int j = __builtin_ctzll(move.m_end);
-        //
-        //         m_nnue.pop_blue(64 + 63 - j);
-        //         m_nnue.push_blue(64 + 63 - i);
-        //
-        //         m_nnue.push_red(i);
-        //         m_nnue.push_blue(63 - i);
-        //     }
-        // }
-
 
         int qsearch(int max_ply, int ply, int alpha, int beta) {
             m_searched += 1;
@@ -795,8 +743,7 @@ namespace engine {
             }
 
 
-            // cache evaluation and pv move
-            // move best_move = move::null();
+            // cache evaluation
             int best_score = evaluate();
 
             if (best_score >= beta) {
@@ -827,7 +774,6 @@ namespace engine {
 
                 if (score > best_score) {
                     best_score = score;
-                    // best_move = move;
                 }
 
                 if (score >= beta) {
@@ -975,13 +921,13 @@ namespace engine {
             if (!is_pv_node && abs(beta) < param::checkmate && !m_pos.has_jumps()) {
                 int adjusted_evaluation = evaluate();
                 if (tt_score_valid) {
-                    double p = m_config.m_tt_eval_prop / 100.0;
+                    double p = CONFIG_GET(m_config, m_tt_eval_prop) / 100.0;
                     adjusted_evaluation =
                             static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
                 }
 
                 int stat = adjusted_evaluation;
-                int score_margin = depth * m_config.m_static_null_move_margin;
+                int score_margin = depth * CONFIG_GET(m_config, m_static_null_move_margin);
                 if ((stat - score_margin) >= beta) {
                     return stat - score_margin;
                 }
@@ -990,19 +936,19 @@ namespace engine {
             // null move pruning
             int remain = m_pos.num_unfinished_piece();
             int growth_count = m_pos.growth_count();
-            if (do_null && !is_pv_node && depth >= m_config.m_nmr_min_depth && remain > 2 && growth_count <= 8) {
+            if (do_null && !is_pv_node && depth >= CONFIG_GET(m_config, m_nmr_min_depth) && remain > 2 && growth_count <= 8) {
                 move null = move::null();
 
                 int adjusted_evaluation = evaluate();
                 if (tt_score_valid) {
-                    double p = m_config.m_tt_eval_prop / 100.0;
+                    double p = CONFIG_GET(m_config, m_tt_eval_prop) / 100.0;
                     adjusted_evaluation =
                             static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
                 }
 
                 int static_score = adjusted_evaluation;
-                int r = m_config.m_nmr_const + depth / m_config.m_nmr_depth +
-                        std::max(0, static_cast<int>(round((static_score - beta) / 10000.0 * m_config.m_nmr_beta_mult)));
+                int r = CONFIG_GET(m_config, m_nmr_const) + depth / CONFIG_GET(m_config, m_nmr_depth) +
+                        std::max(0, static_cast<int>(round((static_score - beta) / 10000.0 * CONFIG_GET(m_config, m_nmr_beta_mult))));
 
                 m_pos.push(null);
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, null, false);
@@ -1020,16 +966,16 @@ namespace engine {
 
             // razoring
             // if static eval is really bad, check via qsearch to see if it fails-low
-            if (depth <= m_config.m_razor_limit && !is_pv_node && !m_pos.has_jumps()) {
+            if (depth <= CONFIG_GET(m_config, m_razor_limit) && !is_pv_node && !m_pos.has_jumps()) {
                 int adjusted_evaluation = evaluate();
                 if (tt_score_valid) {
-                    double p = m_config.m_tt_eval_prop / 100.0;
+                    double p = CONFIG_GET(m_config, m_tt_eval_prop) / 100.0;
                     adjusted_evaluation =
                             static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
                 }
 
                 int static_score = adjusted_evaluation;
-                if (static_score + m_config.m_fut_margins[depth] * m_config.m_razor_mult < alpha) {
+                if (static_score + CONFIG_GET(m_config, m_fut_margins)[depth] * CONFIG_GET(m_config, m_razor_mult) < alpha) {
                     int score = qsearch(ply, 0, alpha, beta);
                     if (score < alpha) {
                         return alpha;
@@ -1039,23 +985,23 @@ namespace engine {
 
             // futility pruning, when static is much worse than alpha, likely not a cut-node, so prune every quiet-move except the pv node
             bool canFutilityPrune = false;
-            if (depth < m_config.m_fut_margins.size() && !is_pv_node && std::abs(alpha) < param::checkmate && std::abs(beta) < param::checkmate && !m_pos.has_jumps()) {
+            if (depth < CONFIG_GET(m_config, m_fut_margins).size() && !is_pv_node && std::abs(alpha) < param::checkmate && std::abs(beta) < param::checkmate && !m_pos.has_jumps()) {
                 int adjusted_evaluation = evaluate();
                 if (tt_score_valid) {
-                    double p = m_config.m_tt_eval_prop / 100.0;
+                    double p = CONFIG_GET(m_config, m_tt_eval_prop) / 100.0;
                     adjusted_evaluation =
                             static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
                 }
 
                 int static_score = adjusted_evaluation;
-                int margin = m_config.m_fut_margins[depth];
+                int margin = CONFIG_GET(m_config, m_fut_margins)[depth];
                 canFutilityPrune = static_score + margin <= alpha;
             }
 
 
             // internal ID
-            if (depth >= m_config.m_iid_depth && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-                negamax(depth - m_config.m_iid_depth_reduction, ply + 1, -beta, -alpha, move::null());
+            if (depth >= CONFIG_GET(m_config, m_iid_depth) && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+                negamax(depth - CONFIG_GET(m_config, m_iid_depth_reduction), ply + 1, -beta, -alpha, move::null());
 
                 if (m_line.pv_length[ply + 1] > ply + 1) {
                     tt_move = m_line.pv_table[ply + 1][ply + 1];
@@ -1090,7 +1036,7 @@ namespace engine {
                 m_pos.push(move);
 
                 // lmp
-                if (depth < m_config.m_lmp_margins.size() && !is_pv_node && explored_moves > m_config.m_lmp_margins[depth] && !move.is_jump()) {
+                if (depth < CONFIG_GET(m_config, m_lmp_margins).size() && !is_pv_node && explored_moves > CONFIG_GET(m_config, m_lmp_margins)[depth] && !move.is_jump()) {
                     bool tactical = m_pos.has_jumps();
                     if (!tactical) {
                         m_pos.pop(move);
@@ -1171,8 +1117,7 @@ namespace engine {
                 }
             }
 
-            if (!m_timer.is_stopped()) {
-                entry = m_tt.store(m_pos.get_hash(), depth);
+            if (!m_timer.is_stopped() && depth >= entry.m_depth) {
                 entry.set(m_pos, m_pos.get_hash(), best_score, best_move, ply, depth, tt_flag);
             }
 
@@ -1375,14 +1320,14 @@ namespace engine {
 
                 if (score <= alpha || score >= beta) {
                     if (score <= alpha) {
-                        alpha = last_score + (alpha - last_score) * config.m_window_scale;
+                        alpha = last_score + (alpha - last_score) * CONFIG_GET(config, m_window_scale);
                         if (alpha <= -40 * 100) {
                             alpha = -param::inf;
                         }
                     }
 
                     if (score >= beta) {
-                        beta = last_score + (beta - last_score) * config.m_window_scale;
+                        beta = last_score + (beta - last_score) * CONFIG_GET(config, m_window_scale);
                         if (beta >= 40 * 100) {
                             beta = param::inf;
                         }
@@ -1416,8 +1361,8 @@ namespace engine {
                 if (new_score != nullptr)
                     *new_score = score;
 
-                alpha = score - config.m_window;
-                beta = score + config.m_window;
+                alpha = score - CONFIG_GET(config, m_window);
+                beta = score + CONFIG_GET(config, m_window);
                 best_move = computer.m_line.get_moves()[0];
                 last_score = score;
                 depth += 1;

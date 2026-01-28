@@ -11,7 +11,7 @@ import agents
 from engine import Pos, Engine
 import matplotlib.pyplot as plt
 
-folder = 'elos/bt4'
+folder = 'elos/bt5'
 
 
 def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_avg_elo=1000, iters=10000):
@@ -50,7 +50,7 @@ def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_a
 
 
 def playoff(engine1, engine2):
-    ts = 500
+    ts = 300
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 
@@ -283,7 +283,7 @@ def plot_elos(elos: dict[str, list[tuple[float, float]]]):
             y,
             yerr=yerr,
             label=name,
-            capsize=3,
+            capsize=2,
             marker='o',
             linestyle='-'
         )

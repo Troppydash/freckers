@@ -310,7 +310,7 @@ void test_a_star_position() {
     }
 }
 
-#ifdef FRECKER_APP
+#ifdef FRECKER_TUNER
 #include "optimizer.h"
 
 void optimize() {
@@ -324,15 +324,6 @@ void optimize() {
 }
 
 int main() {
-    // 0.35
-
-
-
-
-
-    // 0.39
-    // 0.3879
-
     // 0.331715
 
     optimize();
