@@ -14,7 +14,7 @@ endif ()
 
 add_library(frecker SHARED main.cpp)
 
-# https://gist.github.com/jlgerber/eafc4ee2b9954e27dd2bb009496b1b03
+
 add_executable(frecker_app main.cpp
         board.h
         param.h
@@ -24,6 +24,7 @@ add_executable(frecker_app main.cpp
         endgame.h
         aligned.h
 )
+target_compile_definitions(frecker_app PRIVATE FRECKER_APP)
 
 target_link_libraries(frecker_app PRIVATE libcmaes::cmaes)
 

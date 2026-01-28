@@ -99,22 +99,24 @@ namespace engine {
 
         entry &probe(board::hash hash) {
             board::hash index = hash % m_size;
-
-            auto &first = m_entries[index];
-            if (first.m_hash == hash)
-                return first;
-
-            return m_entries[(index + 1) % m_size];
+            return m_entries[index];
+            //
+            // auto &first = m_entries[index];
+            // if (first.m_hash == hash)
+            //     return first;
+            //
+            // return m_entries[(index + 1) % m_size];
         }
 
         entry &store(board::hash hash, int depth) {
             board::hash index = hash % m_size;
+            return m_entries[index];
 
-            auto &first = m_entries[index];
-            if (first.m_depth <= depth)
-                return first;
+            // auto &first = m_entries[index];
+            // if (first.m_depth <= depth)
+            // return first;
 
-            return m_entries[(index + 1) % m_size];
+            // return m_entries[(index + 1) % m_size];
         }
 
         double occupied() {
@@ -181,190 +183,138 @@ namespace engine {
 
     class computer_config {
     public:
+        // m_lmp_margins[depth] is the nodes to search before lmp at depth
         std::array<int, 6> m_lmp_margins{};
+        // the depth divisor reduction
         int m_lmr_depth;
+        // the move divisor reduction
         int m_lmr_move;
+        // extra tempo per move
         int m_tempo;
-
+        // countermove score gain
         int m_countermove;
+        // smallest lily gain to ignore lily move
         int m_lily_min;
-        int m_lily_scale;
+        // m_lily_range[i+1] = lily move ordering weight if lily_count / 8 = i
+        std::array<int, 8> m_lily_range;
+        // margin for static null move
         int m_static_null_move_margin;
+        // m_fut_margins[depth] is the margin before fut pruning
+        std::array<int, 7> m_fut_margins{};
+        // the mult on m_fut_margins[depth] to do razoring
+        int m_razor_mult;
+        // max depth for razoring
+        int m_razor_limit;
+        // nmr depth reduction const
+        int m_nmr_const;
+        // nmr depth reduction depth divisor
+        int m_nmr_depth;
+        // tempo adding limit (inside)
+        int m_tempo_limit;
+        // long jump to end scoring
+        int m_long_jump_end_move;
+        // short jump to end scoring
+        int m_short_jump_end_move;
+        // long jump vgap multiplier scoring
+        int m_long_jump_vgap_mult;
+        // long jump hgap multiplier scoring
+        int m_long_jump_hgap_mult;
+        // endgame check for scoring
+        int m_jump_endgame;
+        // min depth for nmr
+        int m_nmr_min_depth;
+        // beta scaling for nmr depth reduction
+        int m_nmr_beta_mult;
+        // min depth for iid
+        int m_iid_depth;
+        // iid depth reduction amount
+        int m_iid_depth_reduction;
+        // proportion of eval to consider when correcting with tt_score (x100)
+        int m_tt_eval_prop;
+
+        // asp window
+        // NOT TUNED
         int m_window;
+        // asp window expand scale
+        // NOT TUNED
         int m_window_scale;
 
-        std::array<int, 9> m_fut_margins{};
-
-
         computer_config() {
-            // m_lmp_margins = {0, 6, 10, 14, 16, 20};
-            // m_lmr_depth = 3;
-            // m_lmr_move = 7;
-            // m_tempo = 55;
-            // m_static_null_move_margin = 400;
-            // m_countermove = 7;
-            // m_lily_min = 3;
-            // m_lily_scale = 9;
-            // m_window = 5;
-            // m_window_scale = 5;
-            // m_fut_margins = {0, 100, 160, 220, 280, 340, 400, 460, 520};
+            m_lmp_margins = {0, 9, 20, 23, 36, 46};
+            m_lmr_depth = 9;
+            m_lmr_move = 16;
+            m_tempo = 32;
+            m_static_null_move_margin = 1011;
+            m_countermove = 49;
+            m_lily_min = 6;
+            m_lily_range = {0, 153, 833, 1438, 2071, 2495, 2660, 3340};
+            m_fut_margins = {0, 497, 776, 1173, 1185, 1199, 1663};
+            m_razor_mult = 3;
+            m_razor_limit = 6;
+            m_nmr_const = 4;
+            m_nmr_depth = 3;
+            m_tempo_limit = 872;
+            m_long_jump_end_move = 28;
+            m_short_jump_end_move = 47;
+            m_long_jump_vgap_mult = 0;
+            m_long_jump_hgap_mult = 2;
+            m_jump_endgame = 1;
+            m_nmr_min_depth = 3;
+            m_nmr_beta_mult = 3;
+            m_iid_depth = 5;
+            m_iid_depth_reduction = 3;
+            m_tt_eval_prop = 76;
 
-            // m_lmp_margins = {0, 4, 10, 12, 15, 18};
-            // m_lmr_depth = 5;
-            // m_lmr_move = 8;
-            // m_tempo = 56;
-            // m_static_null_move_margin = 397;
-            // m_countermove = 8;
-            // m_lily_min = 8;
-            // m_lily_scale = 17;
-            // m_window = 800;
-            // m_window_scale = 3;
-            // m_fut_margins = {0, 97, 160, 220, 275, 349, 405, 458, 520};
-            //
 
-            m_lmp_margins = {0, 7, 9, 12, 15, 15};
-            m_lmr_depth = 5;
-            m_lmr_move = 9;
-            m_tempo = 105;
-            m_static_null_move_margin = 639;
-            m_countermove = 4;
-            m_lily_min = 8;
-            m_lily_scale = 18;
             m_window = 500;
             m_window_scale = 3;
-            m_fut_margins = {0, 210, 319, 319, 319, 319, 600, 700, 800};
-
-            /*
-
-            LMP_MARGIN 3 4 10 12 15 13
-            LMR 5 8
-            TEMP 56
-            Static 397
-            Counter 8
-            Lily 8 17
-            Window 8 3
-            FUT 1 97 160 220 275 349 405 458 520
-
-            LMP_MARGIN 0 6 10 14 17 19
-            LMR 3 7
-            TEMP 55
-            Static 400
-            Counter 7
-            Lily 3 9
-            Window 5 6
-            FUT 0 100 160 220 280 340 400 459 521
-             */
-            // m_lmp_margins = {0, 4, 10, 12, 16, 25};
-            // m_lmr_depth = 8;
-            // m_lmr_move = 5;
-            // m_tempo = 56;
-            // m_static_null_move_margin = 402;
-            // m_countermove = 6;
-            // m_lily_min = 5;
-            // m_lily_scale = 6;
-            // m_window = 2;
-            // m_window_scale = 2;
-            // m_fut_margins = {6, 103, 172, 212, 276, 340, 402, 468, 527};
-
-
-            // m_lmp_margins = {0, 8, 12, 18, 22, 24};
-            // m_lmr_depth = 4;
-            // m_lmr_move = 12;
-            // m_tempo = 20;
-            // m_static_null_move_margin = 400;
-            // m_countermove = 15;
-            // m_lily_min = 3;
-            // m_lily_scale = 9;
-            // m_window = 5;
-            // m_fut_margins = {0, 200, 220, 240, 280, 340, 400, 460, 520};
-            // m_window_scale = 10;
         }
 
+        void display_one(std::string var, int value) {
+            std::cout << var << " = " << value << ";\n";
+        }
 
-        void change(std::mt19937_64 &rng) {
-            std::uniform_int_distribution<int> dist(2, 6 + 3 + 4 + 1);
-            std::uniform_int_distribution<int> perb(0, 1);
-            int value = dist(rng);
-            int per = perb(rng) * 2 - 1;
-            std::cout << value << std::endl;
-            if (value <= 6) {
-                m_lmp_margins[value - 1] += per;
-            } else if (value == 7) {
-                m_lmr_depth += per;
-            } else if (value == 8) {
-                m_lmr_move += per;
-            } else if (value == 9) {
-                m_tempo += 2 * per;
-            } else if (value == 10) {
-                m_static_null_move_margin += 10 * per;
-            } else if (value == 11) {
-                m_countermove += 2 * per;
-            } else if (value == 12) {
-                m_lily_min += per;
-            } else if (value == 13) {
-                m_lily_scale += 1 * per;
-            } else if (value == 14) {
-                m_window += per;
+        template<int T>
+        void display_list(std::string var, std::array<int, T> &values) {
+            std::cout << var << " = {";
+            for (int i = 0; i < values.size(); ++i) {
+                std::cout << values[i];
+
+                if (i < values.size() - 1) {
+                    std::cout << ", ";
+                }
             }
+            std::cout << "};\n";
         }
 
         void display() {
-            std::cout << "LMP_MARGIN ";
-            for (auto m: m_lmp_margins) {
-                std::cout << m << " ";
-            }
-            std::cout << std::endl;
-            std::cout << "LMR " << m_lmr_depth << " " << m_lmr_move << std::endl;
-            std::cout << "TEMP " << m_tempo << std::endl;
-            std::cout << "Static " << m_static_null_move_margin << std::endl;
-            std::cout << "Counter " << m_countermove << std::endl;
-            std::cout << "Lily " << m_lily_min << " " << m_lily_scale << std::endl;
-            std::cout << "Window " << m_window << " " << m_window_scale << std::endl;
+            display_list<6>("m_lmp_margins", m_lmp_margins);
+            display_one("m_lmr_depth", m_lmr_depth);
+            display_one("m_lmr_move", m_lmr_move);
+            display_one("m_tempo", m_tempo);
+            display_one("m_static_null_move_margin", m_static_null_move_margin);
+            display_one("m_countermove", m_countermove);
+            display_one("m_lily_min", m_lily_min);
+            display_list<8>("m_lily_range", m_lily_range);
+            display_list<7>("m_fut_margins", m_fut_margins);
 
-            std::cout << "FUT ";
-            for (auto m: m_fut_margins) {
-                std::cout << m << " ";
-            }
-        }
+            display_one("m_razor_mult", m_razor_mult);
+            display_one("m_razor_limit", m_razor_limit);
+            display_one("m_nmr_const", m_nmr_const);
+            display_one("m_nmr_depth", m_nmr_depth);
+            display_one("m_tempo_limit", m_tempo_limit);
 
-        bool operator<(const computer_config &other) const {
-            if (m_countermove < other.m_countermove) {
-                return true;
-            }
+            display_one("m_long_jump_end_move", m_long_jump_end_move);
+            display_one("m_short_jump_end_move", m_short_jump_end_move);
+            display_one("m_long_jump_vgap_mult", m_long_jump_vgap_mult);
+            display_one("m_long_jump_hgap_mult", m_long_jump_hgap_mult);
+            display_one("m_jump_endgame", m_jump_endgame);
 
-            if (m_lmp_margins < other.m_lmp_margins) {
-                return true;
-            }
-
-            if (m_lily_scale < other.m_lily_scale) {
-                return true;
-            }
-
-            if (m_lmr_depth < other.m_lmr_depth) {
-                return true;
-            }
-
-            if (m_window < other.m_window) {
-                return true;
-            }
-
-            if (m_static_null_move_margin < other.m_static_null_move_margin) {
-                return true;
-            }
-
-            if (m_lily_min < other.m_lily_min) {
-                return true;
-            }
-
-            if (m_lmr_move < other.m_lmr_move) {
-                return true;
-            }
-
-            if (m_tempo < other.m_tempo) {
-                return true;
-            }
-
-            return false;
+            display_one("m_nmr_min_depth", m_nmr_min_depth);
+            display_one("m_nmr_beta_mult", m_nmr_beta_mult);
+            display_one("m_iid_depth", m_iid_depth);
+            display_one("m_iid_depth_reduction", m_iid_depth_reduction);
+            display_one("m_tt_eval_prop", m_tt_eval_prop);
         }
     };
 
@@ -604,7 +554,7 @@ namespace engine {
                 return m_eval_cache[hash % EVAL_CACHE_SIZE].score;
 
             int eval = nnue_evaluate();
-            if (std::abs(eval) <= 6 * 100)
+            if (std::abs(eval) <= m_config.m_tempo_limit)
                 eval += m_config.m_tempo;
 
             m_eval_cache[hash % EVAL_CACHE_SIZE].score = eval;
@@ -615,31 +565,30 @@ namespace engine {
 
         std::vector<std::pair<int, int>> score_moves(std::vector<move> &moves, move &pv_move, int ply, const move &prev_move) {
             std::vector<std::pair<int, int>> scores;
-            // int stage = median_piece(m_pos.m_players[0], m_pos.m_players[1]);
             for (int i = 0; i < moves.size(); ++i) {
                 int score = 0;
                 move &move = moves[i];
 
                 if (move == pv_move) {
                     score += param::base_score + param::pv_move_score;
-                    // } else if (move.is_jump() && stage <= 5) {
                 } else if (move.is_jump()) {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
                     int vgap = abs(start.first - end.first);
+                    int hgap = abs(start.second - end.second);
 
                     bool is_red = m_pos.m_turn == board::RED;
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 3;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= m_config.m_jump_endgame;
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score;
+                        score += param::base_score + m_config.m_long_jump_end_move;
                     } else if (vgap == 0) {
                         score += 0;
                     } else {
-                        score += param::base_score + vgap;
+                        score += param::base_score + vgap * m_config.m_long_jump_vgap_mult + hgap * m_config.m_long_jump_hgap_mult;
                     }
                 } else if (move == m_killers[ply][0]) {
                     score += param::base_score + param::killer_move_score;
@@ -649,15 +598,14 @@ namespace engine {
                     auto start = bitboard::get_coord(move.m_start);
                     auto end = bitboard::get_coord(move.m_end);
                     bool is_red = m_pos.m_turn == board::RED;
-                    int vgap = abs(start.first - end.first);
 
-                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= 3;
+                    bool is_endgame = m_pos.num_finished_piece(m_pos.m_turn) >= m_config.m_jump_endgame;
                     if (((!is_red && start.first == 0) || (is_red && start.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // don't consider the move if we started at end, but only if num finished is below 3 so no shuffling
                         score += 0;
                     } else if (((!is_red && end.first == 0) || (is_red && end.first == bitboard::ROWS - 1)) && !is_endgame) {
                         // do consider the move if we will finish at end
-                        score += param::base_score + param::end_move_score / 2;
+                        score += param::base_score + m_config.m_short_jump_end_move;
                     } else {
                         if (prev_move.is_storable()) {
                             auto coord = prev_move.get_coords();
@@ -675,7 +623,7 @@ namespace engine {
                     if (count <= m_config.m_lily_min) {
                         score -= 10;
                     } else {
-                        score += count * m_config.m_lily_scale;
+                        score += m_config.m_lily_range[count / 8 + 1];
                     }
                 }
 
@@ -1005,6 +953,9 @@ namespace engine {
                 return tt_score;
             }
 
+            bool tt_score_valid = !tt_move.is_null();
+
+
             //            if (!is_root && !is_pv_node && m_pos.has_crossed() && depth >= 7 && abs(evaluate()) <= 10 * 100) {
             //                int best_score = 0;
             //                int turns = 0;
@@ -1022,21 +973,38 @@ namespace engine {
 
             // static null move pruning
             if (!is_pv_node && abs(beta) < param::checkmate && !m_pos.has_jumps()) {
-                int stat = evaluate();
+                int adjusted_evaluation = evaluate();
+                if (tt_score_valid) {
+                    double p = m_config.m_tt_eval_prop / 100.0;
+                    adjusted_evaluation =
+                            static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
+                }
+
+                int stat = adjusted_evaluation;
                 int score_margin = depth * m_config.m_static_null_move_margin;
                 if ((stat - score_margin) >= beta) {
-                    return (stat + beta) / 2;
+                    return stat - score_margin;
                 }
             }
 
             // null move pruning
             int remain = m_pos.num_unfinished_piece();
             int growth_count = m_pos.growth_count();
-            if (do_null && !is_pv_node && depth >= 2 && remain > 2 && growth_count <= 8) {
+            if (do_null && !is_pv_node && depth >= m_config.m_nmr_min_depth && remain > 2 && growth_count <= 8) {
                 move null = move::null();
-                m_pos.push(null);
 
-                int r = 3 + depth / 6;
+                int adjusted_evaluation = evaluate();
+                if (tt_score_valid) {
+                    double p = m_config.m_tt_eval_prop / 100.0;
+                    adjusted_evaluation =
+                            static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
+                }
+
+                int static_score = adjusted_evaluation;
+                int r = m_config.m_nmr_const + depth / m_config.m_nmr_depth +
+                        std::max(0, static_cast<int>(round((static_score - beta) / 10000.0 * m_config.m_nmr_beta_mult)));
+
+                m_pos.push(null);
                 int score = -negamax(depth - 1 - r, ply + 1, -beta, -beta + 1, null, false);
                 m_pos.pop(null);
 
@@ -1045,16 +1013,23 @@ namespace engine {
                 }
 
                 if (score >= beta) {
-                    return beta;
+                    return score;
                 }
             }
 
 
             // razoring
             // if static eval is really bad, check via qsearch to see if it fails-low
-            if (depth <= 4 && !is_pv_node && !m_pos.has_jumps()) {
-                int static_score = evaluate();
-                if (static_score + depth * 400 < alpha) {
+            if (depth <= m_config.m_razor_limit && !is_pv_node && !m_pos.has_jumps()) {
+                int adjusted_evaluation = evaluate();
+                if (tt_score_valid) {
+                    double p = m_config.m_tt_eval_prop / 100.0;
+                    adjusted_evaluation =
+                            static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
+                }
+
+                int static_score = adjusted_evaluation;
+                if (static_score + m_config.m_fut_margins[depth] * m_config.m_razor_mult < alpha) {
                     int score = qsearch(ply, 0, alpha, beta);
                     if (score < alpha) {
                         return alpha;
@@ -1064,25 +1039,28 @@ namespace engine {
 
             // futility pruning, when static is much worse than alpha, likely not a cut-node, so prune every quiet-move except the pv node
             bool canFutilityPrune = false;
-            if (depth <= 8 && !is_pv_node && std::abs(alpha) < param::checkmate && std::abs(beta) < param::checkmate && !m_pos.has_jumps()) {
-                int static_score = evaluate();
-                canFutilityPrune = static_score + depth * 300 <= alpha;
+            if (depth < m_config.m_fut_margins.size() && !is_pv_node && std::abs(alpha) < param::checkmate && std::abs(beta) < param::checkmate && !m_pos.has_jumps()) {
+                int adjusted_evaluation = evaluate();
+                if (tt_score_valid) {
+                    double p = m_config.m_tt_eval_prop / 100.0;
+                    adjusted_evaluation =
+                            static_cast<int>(round(p * adjusted_evaluation + (1.0 - p) * tt_score));
+                }
+
+                int static_score = adjusted_evaluation;
+                int margin = m_config.m_fut_margins[depth];
+                canFutilityPrune = static_score + margin <= alpha;
             }
 
 
             // internal ID
-            // if (depth >= 4 && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
-            //     negamax(depth - 2 - 1, ply + 1, -beta, -alpha, move::null());
-            //
-            //     if (m_timer.is_stopped()) {
-            //         return 0;
-            //     }
-            //
-            //     if (!child_pv_line.empty()) {
-            //         tt_move = child_pv_line[0];
-            //         child_pv_line.clear();
-            //     }
-            // }
+            if (depth >= m_config.m_iid_depth && (is_pv_node || entry.m_flag == param::beta_flag) && tt_move.is_null()) {
+                negamax(depth - m_config.m_iid_depth_reduction, ply + 1, -beta, -alpha, move::null());
+
+                if (m_line.pv_length[ply + 1] > ply + 1) {
+                    tt_move = m_line.pv_table[ply + 1][ply + 1];
+                }
+            }
 
             // lazily compute the list of moves, since the tt move likely causes the beta cutoff
             std::vector<move> moves;
@@ -1112,7 +1090,7 @@ namespace engine {
                 m_pos.push(move);
 
                 // lmp
-                if (depth <= 5 && !is_pv_node && explored_moves > m_config.m_lmp_margins[depth] && !move.is_jump()) {
+                if (depth < m_config.m_lmp_margins.size() && !is_pv_node && explored_moves > m_config.m_lmp_margins[depth] && !move.is_jump()) {
                     bool tactical = m_pos.has_jumps();
                     if (!tactical) {
                         m_pos.pop(move);

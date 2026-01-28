@@ -227,5 +227,5 @@ class Session6(Session):
 
 
 if __name__ == '__main__':
-    session = Session6("session6")
+    session = Session6("session7")
     session.generate()

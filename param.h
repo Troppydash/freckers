@@ -17,10 +17,9 @@ namespace param {
 
     int base_score = (1 << 30);
 
-    int pv_move_score = 500;
-    int killer_move_score = 480;
-    int killer_move_score2 = 470;
-    int end_move_score = 490;
+    int pv_move_score = 400;
+    int killer_move_score = -10;
+    int killer_move_score2 = -20;
 }
 
 

@@ -46,7 +46,7 @@ def generator():
 
         for i in range(len(dataset.positions)):
             # 9mllion, requires 10k,
-            prob = 50 / 9000
+            prob = 10 / 9000
             if not (random.random() < prob):
                 continue
 
@@ -55,8 +55,10 @@ def generator():
             turn = positions[3]
             eval = dataset.evals[i]
             moves = positions[4]
+            total = dataset.flags[i]
 
-            if abs(moves) < 4:
+            p = 100 if players[turn] == 'current' else int(players[turn])
+            if abs(moves) < 6:
                 continue
 
             # [lily, red, blue, turn, moves]
@@ -70,9 +72,8 @@ def generator():
                 game_result = 0
 
             # our score is in the perspective of the moving player
-            wdl = 0.85
-            p = 100 if players[turn] == 'current' else int(players[turn])
-            if p < 5:
+            wdl = 0.9
+            if p < 6:
                 other = game_result
             elif eval > 40 * 100:
                 other = 1
