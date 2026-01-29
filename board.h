@@ -227,6 +227,16 @@ namespace board {
             return m_grow == bitboard::ALL - 1;
         }
 
+        bool is_reaching_end(int turn) const {
+            if (is_grow())
+            {
+                return false;
+            }
+
+            // not start at end, but end at end
+            return ((m_start & bitboard::ENDS[turn]) == 0) && ((m_end & bitboard::ENDS[turn]) > 0);
+        }
+
         // Get the coordinate from the starting and ending position
         std::pair<int, int> get_coords() const {
             auto start = bitboard::get_index(m_start);
@@ -234,7 +244,17 @@ namespace board {
             return {start, end};
         }
 
+        bool is_important() const
+        {
+            return is_jump();
+        }
+
         bool is_jump() const {
+            if (is_grow())
+            {
+                return false;
+            }
+
             auto [start_r, start_c] = bitboard::get_coord(m_start);
             auto [end_r, end_c] = bitboard::get_coord(m_end);
             return abs(start_r - end_r) >= 2 || abs(start_c - end_c) >= 2;

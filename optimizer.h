@@ -298,9 +298,9 @@ struct optimizer {
             upperbounds[i] = 10;
         }
 
-        double sigma = 1.5;
+        double sigma = 0.5;
         GenoPheno<pwqBoundStrategy> gp(&lowerbounds[0], &upperbounds[0], m_params.size());
-        CMAParameters<GenoPheno<pwqBoundStrategy>> cmaparams(initial, sigma, 18, 42, gp);
+        CMAParameters<GenoPheno<pwqBoundStrategy>> cmaparams(initial, sigma, 14, 42, gp);
         cmaparams.set_algo(aCMAES);
         cmaparams.set_mt_feval(true);
         cmaparams.set_max_fevals(1000);
@@ -317,24 +317,6 @@ struct optimizer {
                 double err = (static_cast<double>(score0 - score1));
                 total += err * err;
 
-
-                // auto [score, ok] = compute_y(m_targets[t].pos, p);
-                // if (!ok) {
-                //     std::cout << "[warning tle]\n";
-                //     return 1e9;
-                // }
-                //
-                // double wdl = 0;
-                // if (score >= param::checkmate)
-                //     wdl = 1;
-                // else if (score <= -param::checkmate)
-                //     wdl = -1;
-                // else
-                //     wdl = tanh(static_cast<double>(score) / 4000.0);
-                //
-                // double diff = (wdl - m_targets[t].score);
-                // total += std::pow(std::abs(diff), 2.6);
-                // total += (wdl - m_targets[t].score) * (wdl - m_targets[t].score);
                 count += 1;
             }
             total /= count;
