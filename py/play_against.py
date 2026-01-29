@@ -65,5 +65,5 @@ def play_engines(engine1, engine2, ts):
 
 if __name__ == '__main__':
     # play_against(engine.Pos.RED, agents.Latest, 5000)
-    play_engines(agents.V75, agents.Latest, 2000)
+    play_engines(agents.V74, agents.Latest, 1000)
     # play_engines(agents.Latest, agents.V75, 2000)

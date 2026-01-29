@@ -350,14 +350,14 @@ int main() {
         if (pos.m_turn == board::RED) {
             printf("start\n");
             engine::lazysmp lazy(1);
-            auto move = lazy.search_one(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
+            auto move = lazy.search_one(pos, 500, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
 
         } else {
             printf("start\n");
             engine::lazysmp lazy(1);
-            auto move = lazy.search(pos, 5000, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
+            auto move = lazy.search(pos, 500, nullptr, {"../weights/nnue.bin"}, engine::computer_config{}, true);
             std::cout << "move " << move.display() << std::endl;
             pos.push(move);
         }

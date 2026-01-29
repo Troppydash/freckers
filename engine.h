@@ -232,7 +232,7 @@ struct computer_config_static
     static constexpr int m_iid_depth_reduction = 3;
 
     static constexpr int m_window = 500;
-    static constexpr int m_window_scale = 3;
+    static constexpr int m_window_scale = 2;
 };
 
 #ifdef FRECKER_HARDCODE_CONFIG
@@ -867,8 +867,10 @@ public:
         swap(scored_moves[i], scored_moves[best_index]);
     }
 
-    void score_and_sort_moves(std::vector<move> &moves, move &pv_move, int ply,
-                              const move &prev_move, int starting_index)
+    void score_and_sort_moves(
+        std::vector<move> &moves, move &pv_move, int ply,
+        const move &prev_move, int starting_index, bool is_qsearch = false
+    )
     {
         int best_score = -10000;
         int best_move_index = starting_index;
@@ -905,10 +907,10 @@ public:
                     score += param::base_score + vgap * CONFIG_GET(m_config, m_long_jump_vgap_mult) + hgap * CONFIG_GET(
                         m_config, m_long_jump_hgap_mult);
                 }
-            } else if (move == m_killers[ply][0])
+            } else if (!is_qsearch && move == m_killers[ply][0])
             {
                 score += param::base_score + param::killer_move_score;
-            } else if (move == m_killers[ply][1])
+            } else if (!is_qsearch && move == m_killers[ply][1])
             {
                 score += param::base_score + param::killer_move_score2;
             } else if (!move.is_grow())
@@ -926,7 +928,7 @@ public:
                 {
                     // do consider the move if we will finish at end
                     score += param::base_score + CONFIG_GET(m_config, m_short_jump_end_move);
-                } else
+                } else if (!is_qsearch)
                 {
                     if (prev_move.is_storable())
                     {
@@ -992,6 +994,17 @@ public:
         }
     }
 
+    void history_update(move &move, int bonus)
+    {
+        auto coord = move.get_coords();
+        auto &ref = m_history[m_pos.m_turn][coord.first][coord.second];
+        constexpr int MAX_HISTORY = param::base_score - 100;
+        ref = std::clamp(
+            ref + bonus,
+            -MAX_HISTORY,
+            MAX_HISTORY);
+    }
+
     // void history_update(move &move, int bonus)
     // {
     //     const int MAX_HISTORY = param::base_score - 100;
@@ -1054,7 +1067,7 @@ public:
             return evaluate();
         }
 
-        if (ply >= 6)
+        if (ply >= 3)
         {
             return evaluate();
         }
@@ -1072,11 +1085,10 @@ public:
 
         std::vector<move> moves = m_pos.get_jump_moves();
         auto null = move::null();
-        auto scored_moves = score_moves(moves, null, max_ply, null);
         for (int i = 0; i < moves.size(); ++i)
         {
-            sort_scored_moves(scored_moves, i);
-            move &move = moves[scored_moves[i].second];
+            score_and_sort_moves(moves, null, ply, null, i, true);
+            move &move = moves[i];
 
             m_nnue_evaluator.push_move(m_pos, move);
             m_pos.push(move);
@@ -1160,7 +1172,7 @@ public:
             return tt_score;
         }
 
-        bool tt_score_valid = !tt_move.is_null();
+        bool tt_move_valid = !tt_move.is_null();
 
         // prob cut
         if (depth >= 5 && depth <= 7 && !is_pv_node && !m_pos.has_jumps())
@@ -1187,7 +1199,7 @@ public:
         }
 
         int adjusted_evaluation = evaluate();
-        if (tt_score_valid)
+        if (tt_move_valid)
         {
             double p = CONFIG_GET(m_config, m_tt_eval_prop) / 100.0;
             adjusted_evaluation =
@@ -1272,16 +1284,10 @@ public:
 
         // lazily compute the list of moves, since the tt move likely causes the beta cutoff
         std::vector<move> moves;
-        std::vector<std::pair<int, int> > scored_moves;
-        if (tt_move.is_null())
-        {
-            moves = m_pos.get_moves();
-            scored_moves = score_moves(moves, tt_move, ply, prev_move);
-        } else
-        {
+        if (tt_move_valid)
             moves = {tt_move};
-            scored_moves = {{0, 0}};
-        }
+        else
+            moves = m_pos.get_moves();
 
         int best_score = -param::inf;
         move best_move = move::null();
@@ -1291,8 +1297,8 @@ public:
 
         for (int i = 0; i < moves.size(); ++i)
         {
-            sort_scored_moves(scored_moves, i);
-            move &move = moves[scored_moves[i].second];
+            score_and_sort_moves(moves, tt_move, ply, prev_move, i);
+            move &move = moves[i];
 
             int explored_moves = i + 1;
 
@@ -1370,12 +1376,22 @@ public:
             {
                 tt_flag = param::beta_flag;
 
-                incr_history(move, depth);
+                // incr_history(move, depth);
+                // if (move.is_quiet())
+                // {
+                //     for (int j = 0; j < quiet_moves_count; ++j)
+                //     {
+                //         decr_history(quiet_moves[j], depth);
+                //     }
+                // }
+
                 if (move.is_quiet())
                 {
+                    history_update(move, depth * depth);
+
                     for (int j = 0; j < quiet_moves_count; ++j)
                     {
-                        decr_history(quiet_moves[j], depth);
+                        history_update(quiet_moves[j], -(depth * depth));
                     }
                 }
 
@@ -1384,7 +1400,7 @@ public:
                 break;
             }
 
-            if (move.is_slient() && quiet_moves_count < 64)
+            if (move.is_quiet() && quiet_moves_count < 64)
             {
                 quiet_moves[quiet_moves_count++] = move;
             }
@@ -1394,14 +1410,24 @@ public:
                 alpha = score;
                 tt_flag = param::exact_flag;
                 m_line.update(ply, move);
+
+                if (move.is_quiet())
+                {
+                    history_update(move, depth);
+                }
+            } else
+            {
+                if (move.is_quiet())
+                {
+                    history_update(move, -depth);
+                }
             }
 
             // compute full list if tt failed to beta cutoff
-            if (explored_moves == 1 && !tt_move.is_null())
+            if (explored_moves == 1 && tt_move_valid)
             {
                 moves = m_pos.get_moves();
-                scored_moves = score_moves(moves, tt_move, ply, prev_move);
-                sort_scored_moves(scored_moves, 0);
+                score_and_sort_moves(moves, tt_move, ply, prev_move, 0);
             }
         }
 
@@ -1609,6 +1635,7 @@ public:
         move null = move::null();
         move best_move = move::null();
         int last_score = 0;
+        int delta = CONFIG_GET(config, m_window);
         while (depth <= max_depth)
         {
             int score = computer.negamax(depth, 0, alpha, beta, null, true);
@@ -1624,23 +1651,27 @@ public:
 
             if (score <= alpha || score >= beta)
             {
-                if (score <= alpha)
-                {
-                    alpha = last_score + (alpha - last_score) * CONFIG_GET(config, m_window_scale);
-                    if (alpha <= -40 * 100)
-                    {
-                        alpha = -param::inf;
-                    }
-                }
-
-                if (score >= beta)
-                {
-                    beta = last_score + (beta - last_score) * CONFIG_GET(config, m_window_scale);
-                    if (beta >= 40 * 100)
-                    {
-                        beta = param::inf;
-                    }
-                }
+                delta *= CONFIG_GET(config, m_window_scale);
+                beta = score + delta;
+                alpha = score - delta;
+                // if (score <= alpha)
+                // {
+                //
+                //     alpha = last_score + (alpha - last_score) * CONFIG_GET(config, m_window_scale);
+                //     if (alpha <= -40 * 100)
+                //     {
+                //         alpha = -param::inf;
+                //     }
+                // }
+                //
+                // if (score >= beta)
+                // {
+                //     beta = last_score + (beta - last_score) * CONFIG_GET(config, m_window_scale);
+                //     if (beta >= 40 * 100)
+                //     {
+                //         beta = param::inf;
+                //     }
+                // }
 
                 continue;
             }
@@ -1672,8 +1703,15 @@ public:
             if (new_score != nullptr)
                 *new_score = score;
 
-            alpha = score - CONFIG_GET(config, m_window);
-            beta = score + CONFIG_GET(config, m_window);
+            alpha = score - delta;
+            beta = score + delta;
+
+            if (std::abs(score) > param::checkmate)
+            {
+                alpha = -param::inf;
+                beta = param::inf;
+            }
+
             best_move = computer.m_line.get_moves()[0];
             last_score = score;
             depth += 1;
