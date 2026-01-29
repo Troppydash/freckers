@@ -130,23 +130,20 @@ struct optimizer {
 
         using namespace param_helpers;
 
-        append_incr_list<6>(m_params, config.m_lmp_margins, 0, 15);
-        // append_list<6>(m_params, config.m_lmp_margins, 0, 45);
-        append(m_params, config.m_lmr_depth, 1, 10);
-        append(m_params, config.m_lmr_move, 1, 20);
+        // append_incr_list<6>(m_params, config.m_lmp_margins, 0, 10);
+        // append(m_params, config.m_lmr_depth, 1, 10);
+        // append(m_params, config.m_lmr_move, 1, 20);
         append(m_params, config.m_tempo, 1, 200);
-        append(m_params, config.m_static_null_move_margin, 100, 1200);
+        // append(m_params, config.m_static_null_move_margin, 100, 1200);
         append(m_params, config.m_countermove, 0, 100);
         append(m_params, config.m_lily_min, 0, 10);
 
         append_incr_list<8>(m_params, config.m_lily_range, 0, 700);
-        // append_list<6>(m_params, config.m_lily_range, 0, 1000);
-        append_incr_list<7>(m_params, config.m_fut_margins, 0, 500);
-        // append_list<7>(m_params, config.m_fut_margins, 0, 1000);
-        append(m_params, config.m_razor_mult, 1, 6);
-        append(m_params, config.m_razor_limit, 2, 6);
-        append(m_params, config.m_nmr_const, 1, 6);
-        append(m_params, config.m_nmr_depth, 1, 14);
+        // append_incr_list<7>(m_params, config.m_fut_margins, 0, 500);
+        // append(m_params, config.m_razor_mult, 1, 6);
+        // append(m_params, config.m_razor_limit, 2, 6);
+        // append(m_params, config.m_nmr_const, 1, 6);
+        // append(m_params, config.m_nmr_depth, 1, 14);
         append(m_params, config.m_tempo_limit, 10, 1500);
         append(m_params, config.m_long_jump_end_move, 1, 80);
         append(m_params, config.m_short_jump_end_move, 1, 80);
@@ -154,10 +151,10 @@ struct optimizer {
         append(m_params, config.m_long_jump_hgap_mult, 0, 4);
         append(m_params, config.m_jump_endgame, 1, 8);
 
-        append(m_params, config.m_nmr_min_depth, 1, 4);
-        append(m_params, config.m_nmr_beta_mult, 0, 200);
-        append(m_params, config.m_iid_depth, 4, 6);
-        append(m_params, config.m_iid_depth_reduction, 2, 6);
+        // append(m_params, config.m_nmr_min_depth, 1, 4);
+        // append(m_params, config.m_nmr_beta_mult, 0, 200);
+        // append(m_params, config.m_iid_depth, 4, 6);
+        // append(m_params, config.m_iid_depth_reduction, 2, 6);
         append(m_params, config.m_tt_eval_prop, 0, 100);
 
         if (reset) {
@@ -174,23 +171,20 @@ struct optimizer {
 
         using namespace param_helpers;
 
-        parse_incr_list<6>(config.m_lmp_margins, params, i);
-        // parse_list<6>(config.m_lmp_margins, params, i);
-        parse(config.m_lmr_depth, params, i);
-        parse(config.m_lmr_move, params, i);
+        // parse_incr_list<6>(config.m_lmp_margins, params, i);
+        // parse(config.m_lmr_depth, params, i);
+        // parse(config.m_lmr_move, params, i);
         parse(config.m_tempo, params, i);
-        parse(config.m_static_null_move_margin, params, i);
+        // parse(config.m_static_null_move_margin, params, i);
         parse(config.m_countermove, params, i);
         parse(config.m_lily_min, params, i);
 
         parse_incr_list<8>(config.m_lily_range, params, i);
-        // parse_list<6>(config.m_lily_range, params, i);
-        parse_incr_list<7>(config.m_fut_margins, params, i);
-        // parse_list<7>(config.m_fut_margins, params, i);
-        parse(config.m_razor_mult, params, i);
-        parse(config.m_razor_limit, params, i);
-        parse(config.m_nmr_const, params, i);
-        parse(config.m_nmr_depth, params, i);
+        // parse_incr_list<7>(config.m_fut_margins, params, i);
+        // parse(config.m_razor_mult, params, i);
+        // parse(config.m_razor_limit, params, i);
+        // parse(config.m_nmr_const, params, i);
+        // parse(config.m_nmr_depth, params, i);
         parse(config.m_tempo_limit, params, i);
         parse(config.m_long_jump_end_move, params, i);
         parse(config.m_short_jump_end_move, params, i);
@@ -198,10 +192,10 @@ struct optimizer {
         parse(config.m_long_jump_hgap_mult, params, i);
         parse(config.m_jump_endgame, params, i);
 
-        parse(config.m_nmr_min_depth, params, i);
-        parse(config.m_nmr_beta_mult, params, i);
-        parse(config.m_iid_depth, params, i);
-        parse(config.m_iid_depth_reduction, params, i);
+        // parse(config.m_nmr_min_depth, params, i);
+        // parse(config.m_nmr_beta_mult, params, i);
+        // parse(config.m_iid_depth, params, i);
+        // parse(config.m_iid_depth_reduction, params, i);
         parse(config.m_tt_eval_prop, params, i);
 
 
@@ -214,33 +208,53 @@ struct optimizer {
     }
 
 
-    std::pair<int, bool> compute_y(const board::pos &position, std::vector<optimizer_param> &x) {
-        // required to search to *max_depth* in under *max_ts* ms, else fails entire eval
-        int max_depth = 8;
-        int max_ts = 300;
+    std::pair<int, int> compute_y(const board::pos &position, std::vector<optimizer_param> &x) {
+        int max_depth_0 = 5;
+        int max_depth_1 = 9;
+        int max_ts_0 = 100;
+        int max_ts_1 = 600;
 
-        board::pos dup_pos{position};
-        int score = 0;
-        int reached_depth = 0;
-        engine::lazysmp lazysmp{1, 8};
-        lazysmp.search_one(dup_pos, max_ts, &score, {"../weights/nnue.bin"}, to_config(x), false, &reached_depth, max_depth);
+        int score_0 = 0;
+        int reached_depth_0 = 0;
+        engine::lazysmp lazysmp_0{1, 8};
+        lazysmp_0.search_one(position, max_ts_0, &score_0, {"../weights/nnue.bin"}, to_config(x), false, &reached_depth_0, max_depth_0);
 
-        if (reached_depth != max_depth) {
-            std::cout << "[warning tle 0]\n";
 
-            // re-search
-            board::pos dup_pos{position};
-            score = 0;
-            reached_depth = 0;
-            engine::lazysmp lazysmp{1, 8};
-            lazysmp.search_one(dup_pos, max_ts, &score, {"../weights/nnue.bin"}, to_config(x), false, &reached_depth, max_depth);
+        int score_1 = 0;
+        int reached_depth_1 = 0;
+        engine::lazysmp lazysmp_1{1, 16};
+        lazysmp_1.search_one(position, max_ts_1, &score_1, {"../weights/nnue.bin"}, to_config(x), false, &reached_depth_1, max_depth_1);
 
-            if (reached_depth != max_depth) {
-                return {score, false};
-            }
+        if (reached_depth_0 != max_depth_0) {
+            std::cout << "[warning] tle0\n";
         }
 
-        return {score, true};
+        if (reached_depth_1 != max_depth_1) {
+            std::cout << "[warning] tle1\n";
+        }
+
+        if (reached_depth_1 <= reached_depth_0) {
+            std::cout << "[error] same depth\n";
+        }
+
+        return {score_0, score_1};
+
+        // if (reached_depth != max_depth) {
+        //     std::cout << "[warning tle 0]\n";
+        //
+        //     // re-search
+        //     board::pos dup_pos{position};
+        //     score = 0;
+        //     reached_depth = 0;
+        //     engine::lazysmp lazysmp{1, 8};
+        //     lazysmp.search_one(dup_pos, max_ts, &score, {"../weights/nnue.bin"}, to_config(x), false, &reached_depth, max_depth);
+        //
+        //     if (reached_depth != max_depth) {
+        //         return {score, false};
+        //     }
+        // }
+
+        // return {score, true};
     }
 
     void display_params(std::vector<optimizer_param> &params) {
@@ -286,7 +300,7 @@ struct optimizer {
 
         double sigma = 1.5;
         GenoPheno<pwqBoundStrategy> gp(&lowerbounds[0], &upperbounds[0], m_params.size());
-        CMAParameters<GenoPheno<pwqBoundStrategy>> cmaparams(initial, sigma, 20, 42, gp);
+        CMAParameters<GenoPheno<pwqBoundStrategy>> cmaparams(initial, sigma, 18, 42, gp);
         cmaparams.set_algo(aCMAES);
         cmaparams.set_mt_feval(true);
         cmaparams.set_max_fevals(1000);
@@ -298,23 +312,28 @@ struct optimizer {
                 p.push_back(optimizer_param::load_hidden(params[i], m_params[i]));
             }
             int count = 0;
-            for (int t = 0; t < m_targets.size(); t += 1) {
-                auto [score, ok] = compute_y(m_targets[t].pos, p);
-                if (!ok) {
-                    std::cout << "[warning tle]\n";
-                    return 1e9;
-                }
+            for (int t = 0; t < m_targets.size(); t += 500) {
+                auto [score0, score1] = compute_y(m_targets[t].pos, p);
+                double err = (static_cast<double>(score0 - score1));
+                total += err * err;
 
-                double wdl = 0;
-                if (score >= param::checkmate)
-                    wdl = 1;
-                else if (score <= -param::checkmate)
-                    wdl = -1;
-                else
-                    wdl = tanh(static_cast<double>(score) / 4000.0);
 
-                double diff = (wdl - m_targets[t].score);
-                total += std::pow(std::abs(diff), 2.6);
+                // auto [score, ok] = compute_y(m_targets[t].pos, p);
+                // if (!ok) {
+                //     std::cout << "[warning tle]\n";
+                //     return 1e9;
+                // }
+                //
+                // double wdl = 0;
+                // if (score >= param::checkmate)
+                //     wdl = 1;
+                // else if (score <= -param::checkmate)
+                //     wdl = -1;
+                // else
+                //     wdl = tanh(static_cast<double>(score) / 4000.0);
+                //
+                // double diff = (wdl - m_targets[t].score);
+                // total += std::pow(std::abs(diff), 2.6);
                 // total += (wdl - m_targets[t].score) * (wdl - m_targets[t].score);
                 count += 1;
             }

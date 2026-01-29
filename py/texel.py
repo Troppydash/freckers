@@ -7,6 +7,7 @@ import random
 import re
 
 from torch.utils.data import Dataset
+
 WDL_SCALE = 2684
 pk_file = "session6"
 
@@ -44,12 +45,12 @@ def generator():
         players = fil
         print(f"[dataset] {players[0]} vs {players[1]}")
 
-        for i in range(len(dataset.positions)):
-            # 9mllion, requires 10k,
-            prob = 10 / 9000
-            if not (random.random() < prob):
-                continue
+        p0 = 6 if players[0] == 'current' else int(players[0])
+        p1 = 6 if players[1] == 'current' else int(players[1])
+        if not (p0 == 6 and p1 == 6):
+            continue
 
+        for i in range(len(dataset.positions)):
             positions = dataset.positions[i]
             outcome = dataset.outcomes[i]
             turn = positions[3]
@@ -57,8 +58,14 @@ def generator():
             moves = positions[4]
             total = dataset.flags[i]
 
-            p = 100 if players[turn] == 'current' else int(players[turn])
-            if abs(moves) < 6:
+            p = 6 if players[turn] == 'current' else int(players[turn])
+
+            # skip early, late, checkmate, unstable positions, zero positions, draws
+            prev_eval = -dataset.evals[i - 1]
+            eval_diff = abs(prev_eval - eval)
+            zeros = (abs(prev_eval) + abs(eval)) / 2
+            if moves < 10 or total - moves < 10 or abs(
+                    eval) > 30 * 100 or eval_diff > 7 * 100 or zeros < 1 * 100 or outcome == 2:
                 continue
 
             # [lily, red, blue, turn, moves]

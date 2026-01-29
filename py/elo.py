@@ -50,7 +50,7 @@ def bradley_terry(names: list[str], wins: dict[tuple[str, str], float], target_a
 
 
 def playoff(engine1, engine2):
-    ts = 300
+    ts = 500
     engine1: Engine = engine1()
     engine2: Engine = engine2()
 

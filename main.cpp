@@ -326,6 +326,10 @@ void optimize() {
 int main() {
     // 0.331715
 
+    // 187000
+
+    // 207117
+
     optimize();
     return 0;
 }

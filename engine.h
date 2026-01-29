@@ -172,40 +172,44 @@ namespace engine {
     };
 
 
-#ifdef FRECKER_HARDCODE_CONFIG
-#define CONFIG_GET(config, entry) (computer_config::entry)
-    struct computer_config {
-        static constexpr std::array<int, 6> m_lmp_margins = {0, 9, 20, 23, 36, 46};
-        static constexpr int m_lmr_depth = 9;
-        static constexpr int m_lmr_move = 16;
-        static constexpr int m_tempo = 32;
-        static constexpr int m_static_null_move_margin = 1011;
-        static constexpr int m_countermove = 49;
-        static constexpr int m_lily_min = 6;
-        static constexpr std::array<int, 9> m_lily_range = {0, 153, 833, 1438, 2071, 2495, 2660, 3340};
-        static constexpr std::array<int, 9> m_fut_margins = {0, 497, 776, 1173, 1185, 1199, 1663};
+    struct computer_config_static {
+        // evaluation features
+        static constexpr int m_tempo = 50;
+        static constexpr int m_tempo_limit = 1289;
+        static constexpr int m_lily_min = 2;
+        static constexpr std::array<int, 8> m_lily_range = {0, 56, 750, 1443, 1904, 2412, 2418, 2872};
+        static constexpr int m_long_jump_end_move = 78;
+        static constexpr int m_short_jump_end_move = 35;
+        static constexpr int m_long_jump_vgap_mult = 2;
+        static constexpr int m_long_jump_hgap_mult = 0;
+        static constexpr int m_jump_endgame = 3;
+        static constexpr int m_tt_eval_prop = 92;
+        static constexpr int m_countermove = 16;
+
+        // pruning features
+        static constexpr std::array<int, 6> m_lmp_margins = {0, 7, 13, 16, 18, 25};
+        static constexpr int m_lmr_depth = 4;
+        static constexpr int m_lmr_move = 12;
+        static constexpr int m_static_null_move_margin = 1000;
+        static constexpr std::array<int, 7> m_fut_margins = {0, 444, 937, 1336, 1558, 1646, 2102};
         static constexpr int m_razor_mult = 3;
         static constexpr int m_razor_limit = 6;
-        static constexpr int m_nmr_const = 4;
-        static constexpr int m_nmr_depth = 3;
-        static constexpr int m_tempo_limit = 872;
-        static constexpr int m_long_jump_end_move = 28;
-        static constexpr int m_short_jump_end_move = 47;
-        static constexpr int m_long_jump_vgap_mult = 0;
-        static constexpr int m_long_jump_hgap_mult = 2;
-        static constexpr int m_jump_endgame = 1;
+        static constexpr int m_nmr_const = 3;
+        static constexpr int m_nmr_depth = 5;
         static constexpr int m_nmr_min_depth = 3;
-        static constexpr int m_nmr_beta_mult = 3;
+        static constexpr int m_nmr_beta_mult = 34;
         static constexpr int m_iid_depth = 5;
         static constexpr int m_iid_depth_reduction = 3;
-        static constexpr int m_tt_eval_prop = 76;
 
         static constexpr int m_window = 500;
         static constexpr int m_window_scale = 3;
     };
 
-#else
+#ifdef FRECKER_HARDCODE_CONFIG
+#define CONFIG_GET(config, entry) (computer_config_static::entry)
 
+    struct computer_config {};
+#else
 #define CONFIG_GET(config, entry) (config.entry)
 
     class computer_config {
@@ -267,30 +271,112 @@ namespace engine {
         int m_window_scale;
 
         computer_config() {
-            m_lmp_margins = {0, 9, 20, 23, 36, 46};
-            m_lmr_depth = 9;
-            m_lmr_move = 16;
-            m_tempo = 32;
-            m_static_null_move_margin = 1011;
-            m_countermove = 49;
-            m_lily_min = 6;
-            m_lily_range = {0, 153, 833, 1438, 2071, 2495, 2660, 3340};
-            m_fut_margins = {0, 497, 776, 1173, 1185, 1199, 1663};
-            m_razor_mult = 3;
-            m_razor_limit = 6;
-            m_nmr_const = 4;
-            m_nmr_depth = 3;
-            m_tempo_limit = 872;
-            m_long_jump_end_move = 28;
-            m_short_jump_end_move = 47;
-            m_long_jump_vgap_mult = 0;
-            m_long_jump_hgap_mult = 2;
-            m_jump_endgame = 1;
-            m_nmr_min_depth = 3;
-            m_nmr_beta_mult = 3;
-            m_iid_depth = 5;
-            m_iid_depth_reduction = 3;
-            m_tt_eval_prop = 76;
+            // m_lmp_margins = {0, 6, 10, 14, 16, 24};
+            // m_lmr_depth = 4;
+            // m_lmr_move = 12;
+            // m_tempo = 50;
+            // m_static_null_move_margin = 1000;
+            // m_countermove = 20;
+            // m_lily_min = 2;
+            // m_lily_range = {0, 32, 715, 1407, 1866, 2365, 2369, 2833};
+            // m_fut_margins = {0, 423, 862, 1277, 1377, 1729, 2075};
+            // m_razor_mult = 3;
+            // m_razor_limit = 6;
+            // m_nmr_const = 3;
+            // m_nmr_depth = 6;
+            // m_tempo_limit = 1000;
+            // m_long_jump_end_move = 57;
+            // m_short_jump_end_move = 31;
+            // m_long_jump_vgap_mult = 2;
+            // m_long_jump_hgap_mult = 0;
+            // m_jump_endgame = 3;
+            // m_nmr_min_depth = 3;
+            // m_nmr_beta_mult = 25;
+            // m_iid_depth = 5;
+            // m_iid_depth_reduction = 3;
+            // m_tt_eval_prop = 100;
+
+            //oldgood
+            // m_lmp_margins = {0, 7, 13, 16, 18, 25};
+            // m_lmr_depth = 4;
+            // m_lmr_move = 12;
+            // m_tempo = 51;
+            // m_static_null_move_margin = 1082;
+            // m_countermove = 16;
+            // m_lily_min = 2;
+            // m_lily_range = {0, 56, 750, 1443, 1904, 2412, 2418, 2872};
+            // m_fut_margins = {0, 383, 827, 1247, 1397, 1739, 2113};
+            // m_razor_mult = 3;
+            // m_razor_limit = 6;
+            // m_nmr_const = 3;
+            // m_nmr_depth = 5;
+            // m_tempo_limit = 946;
+            // m_long_jump_end_move = 62;
+            // m_short_jump_end_move = 32;
+            // m_long_jump_vgap_mult = 2;
+            // m_long_jump_hgap_mult = 0;
+            // m_jump_endgame = 3;
+            // m_nmr_min_depth = 3;
+            // m_nmr_beta_mult = 34;
+            // m_iid_depth = 5;
+            // m_iid_depth_reduction = 3;
+            // m_tt_eval_prop = 99;
+
+            // m_lmp_margins = {0, 9, 16, 21, 21, 31};
+            // m_lmr_depth = 4;
+            // m_lmr_move = 14;
+            // m_tempo = 82;
+            // m_static_null_move_margin = 100;
+            // m_countermove = 10;
+            // m_lily_min = 1;
+            // m_lily_range = {0, 156, 750, 1447, 1941, 2640, 2951, 3314};
+            // m_fut_margins = {0, 444, 937, 1336, 1558, 1646, 2102};
+            // m_razor_mult = 3;
+            // m_razor_limit = 4;
+            // m_nmr_const = 1;
+            // m_nmr_depth = 6;
+            // m_tempo_limit = 1289;
+            // m_long_jump_end_move = 78;
+            // m_short_jump_end_move = 35;
+            // m_long_jump_vgap_mult = 2;
+            // m_long_jump_hgap_mult = 0;
+            // m_jump_endgame = 4;
+            // m_nmr_min_depth = 2;
+            // m_nmr_beta_mult = 39;
+            // m_iid_depth = 5;
+            // m_iid_depth_reduction = 4;
+            // m_tt_eval_prop = 92;
+
+            // evaluation features
+            m_tempo = computer_config_static::m_tempo;
+            m_lily_min = computer_config_static::m_lily_min;
+            m_lily_range = computer_config_static::m_lily_range;
+            m_tempo_limit = computer_config_static::m_tempo_limit;
+            m_long_jump_end_move = computer_config_static::m_long_jump_end_move;
+            m_short_jump_end_move = computer_config_static::m_short_jump_end_move;
+            m_long_jump_vgap_mult = computer_config_static::m_long_jump_vgap_mult;
+            m_long_jump_hgap_mult = computer_config_static::m_long_jump_hgap_mult;
+            m_jump_endgame = computer_config_static::m_jump_endgame;
+            m_tt_eval_prop = computer_config_static::m_tt_eval_prop;
+            m_countermove = computer_config_static::m_countermove;
+
+            // pruning features
+            m_lmp_margins = computer_config_static::m_lmp_margins;
+            m_lmr_depth = computer_config_static::m_lmr_depth;
+            m_lmr_move = computer_config_static::m_lmr_move;
+            m_static_null_move_margin = computer_config_static::m_static_null_move_margin;
+            m_fut_margins = computer_config_static::m_fut_margins;
+            m_razor_mult = computer_config_static::m_razor_mult;
+            m_razor_limit = computer_config_static::m_razor_limit;
+            m_nmr_const = computer_config_static::m_nmr_const;
+            m_nmr_depth = computer_config_static::m_nmr_depth;
+            m_nmr_min_depth = computer_config_static::m_nmr_min_depth;
+            m_nmr_beta_mult = computer_config_static::m_nmr_beta_mult;
+            m_iid_depth = computer_config_static::m_iid_depth;
+            m_iid_depth_reduction = computer_config_static::m_iid_depth_reduction;
+
+            m_window = computer_config_static::m_window;
+            m_window_scale = computer_config_static::m_window_scale;
 
 
             m_window = 500;
@@ -298,12 +384,12 @@ namespace engine {
         }
 
         void display_one(std::string var, int value) {
-            std::cout << var << " = " << value << ";\n";
+            std::cout << "static constexpr int " << var << " = " << value << ";\n";
         }
 
         template<int T>
         void display_list(std::string var, std::array<int, T> &values) {
-            std::cout << var << " = {";
+            std::cout << "static constexpr std::array<int, " << T << "> " << var << " = {";
             for (int i = 0; i < values.size(); ++i) {
                 std::cout << values[i];
 
@@ -315,33 +401,33 @@ namespace engine {
         }
 
         void display() {
-            display_list<6>("m_lmp_margins", m_lmp_margins);
-            display_one("m_lmr_depth", m_lmr_depth);
-            display_one("m_lmr_move", m_lmr_move);
+            std::cout << "evaluation features\n";
             display_one("m_tempo", m_tempo);
-            display_one("m_static_null_move_margin", m_static_null_move_margin);
-            display_one("m_countermove", m_countermove);
+            display_one("m_tempo_limit", m_tempo_limit);
             display_one("m_lily_min", m_lily_min);
             display_list<8>("m_lily_range", m_lily_range);
-            display_list<7>("m_fut_margins", m_fut_margins);
-
-            display_one("m_razor_mult", m_razor_mult);
-            display_one("m_razor_limit", m_razor_limit);
-            display_one("m_nmr_const", m_nmr_const);
-            display_one("m_nmr_depth", m_nmr_depth);
-            display_one("m_tempo_limit", m_tempo_limit);
-
             display_one("m_long_jump_end_move", m_long_jump_end_move);
             display_one("m_short_jump_end_move", m_short_jump_end_move);
             display_one("m_long_jump_vgap_mult", m_long_jump_vgap_mult);
             display_one("m_long_jump_hgap_mult", m_long_jump_hgap_mult);
             display_one("m_jump_endgame", m_jump_endgame);
+            display_one("m_tt_eval_prop", m_tt_eval_prop);
+            display_one("m_countermove", m_countermove);
 
+            std::cout << "\npruning features\n";
+            display_list<6>("m_lmp_margins", m_lmp_margins);
+            display_one("m_lmr_depth", m_lmr_depth);
+            display_one("m_lmr_move", m_lmr_move);
+            display_one("m_static_null_move_margin", m_static_null_move_margin);
+            display_list<7>("m_fut_margins", m_fut_margins);
+            display_one("m_razor_mult", m_razor_mult);
+            display_one("m_razor_limit", m_razor_limit);
+            display_one("m_nmr_const", m_nmr_const);
+            display_one("m_nmr_depth", m_nmr_depth);
             display_one("m_nmr_min_depth", m_nmr_min_depth);
             display_one("m_nmr_beta_mult", m_nmr_beta_mult);
             display_one("m_iid_depth", m_iid_depth);
             display_one("m_iid_depth_reduction", m_iid_depth_reduction);
-            display_one("m_tt_eval_prop", m_tt_eval_prop);
         }
     };
 #endif
@@ -1406,8 +1492,8 @@ namespace engine {
                 *new_score = score;
 
             int last_score = score;
-            alpha = last_score - config.m_window;
-            beta = last_score + config.m_window;
+            alpha = last_score - CONFIG_GET(config, m_window);
+            beta = last_score + CONFIG_GET(config, m_window);
 
             std::vector<int> scores(m_threads);
             std::vector<std::vector<move>> best_moves(m_threads);
@@ -1468,14 +1554,14 @@ namespace engine {
                             // useless eval if outside the asp window, so why not research
                             if (score <= alpha || score >= beta) {
                                 if (score <= alpha) {
-                                    alpha = last_score_ + (alpha - last_score_) * config.m_window_scale;
+                                    alpha = last_score_ + (alpha - last_score_) * CONFIG_GET(config, m_window_scale);
                                     if (alpha < -50 * 100) {
                                         alpha = -param::inf;
                                     }
                                 }
 
                                 if (score >= beta) {
-                                    beta = last_score_ + (beta - last_score_) * config.m_window_scale;
+                                    beta = last_score_ + (beta - last_score_) * CONFIG_GET(config, m_window_scale);
                                     if (beta > 50 * 100) {
                                         beta = param::inf;
                                     }
@@ -1493,8 +1579,8 @@ namespace engine {
                             depth += 1;
                             is_retry = true;
                             last_score_ = score;
-                            alpha = last_score_ - config.m_window;
-                            beta = last_score_ + config.m_window;
+                            alpha = last_score_ - CONFIG_GET(config, m_window);
+                            beta = last_score_ + CONFIG_GET(config, m_window);
                         }
 
 
@@ -1529,14 +1615,14 @@ namespace engine {
 
                     if (score <= alpha || score >= beta) {
                         if (score <= alpha) {
-                            alpha = last_score + (alpha - last_score) * config.m_window_scale;
+                            alpha = last_score + (alpha - last_score) * CONFIG_GET(config, m_window_scale);
                             if (alpha < -50 * 100) {
                                 alpha = -param::inf;
                             }
                         }
 
                         if (score >= beta) {
-                            beta = last_score + (beta - last_score) * config.m_window_scale;
+                            beta = last_score + (beta - last_score) * CONFIG_GET(config, m_window_scale);
                             if (beta > 50 * 100) {
                                 beta = param::inf;
                             }
@@ -1640,8 +1726,8 @@ namespace engine {
                     printf("]\n");
                 }
 
-                alpha = last_score - config.m_window;
-                beta = last_score + config.m_window;
+                alpha = last_score - CONFIG_GET(config, m_window);
+                beta = last_score + CONFIG_GET(config, m_window);
 
                 depth += 1;
             }
